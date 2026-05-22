@@ -1,0 +1,13 @@
+# SPDX-FileCopyrightText: 2026 HarryLoong
+# SPDX-License-Identifier: MIT
+
+onnxruntime
+typer
+rich
+pydub
+numpy
+scipy
+gguf
+srt
+librosa
+soundfile

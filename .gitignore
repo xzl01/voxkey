@@ -1,0 +1,34 @@
+# SPDX-FileCopyrightText: 2026 HarryLoong
+# SPDX-License-Identifier: MIT
+
+# Local runtime configuration
+/config.json
+
+# Runtime audio and caches
+/recordings/
+/__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# Large model artifacts
+/models/
+/model/
+/model-*/
+*.gguf
+*.onnx
+Qwen3-ASR-*-gguf.zip
+
+# Native build output
+/fcitx-addon/build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+install_manifest.txt
+Makefile
+*.o
+*.so
+
+# Local editor/agent scratch directories
+/.agents/
+/.codex/
+.DS_Store

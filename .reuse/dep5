@@ -1,0 +1,18 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: Qwen Voice Input
+Source: https://github.com/xzl01/qwen-voice-input
+
+Files:
+  .gitignore
+  .reuse/dep5
+  LICENSE
+  README.md
+  INSTALL.md
+  config.example.json
+  docs/*.md
+  docs/assets/*.svg
+  fcitx-addon/qwenvoiceinput.conf
+  requirements-asr.txt
+  systemd/user/qwen-voice-input.service
+Copyright: 2026 HarryLoong
+License: MIT

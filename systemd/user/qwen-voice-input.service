@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: 2026 HarryLoong
+# SPDX-License-Identifier: MIT
+
+[Unit]
+Description=Qwen3-ASR push-to-talk voice input
+After=graphical-session.target pipewire.service
+
+[Service]
+Type=simple
+WorkingDirectory=%h/AI/VoiceInput
+ExecStart=%h/AI/VoiceInput/run.sh
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

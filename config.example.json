@@ -1,0 +1,31 @@
+{
+  "trigger": {
+    "enabled": false,
+    "backend": "evdev",
+    "input_name": null,
+    "input_device": null,
+    "code": null,
+    "name": "voice input key",
+    "mode": "hold"
+  },
+  "recordings_dir": "$HOME/.local/share/qwen-voice-input/recordings",
+  "asr_project_dir": "$HOME/AI/Model/Qwen3-ASR-GGUF",
+  "model_dir": "$HOME/AI/Model/Qwen3-ASR-GGUF/model-1.7B",
+  "python_venv": "$HOME/qwen3-asr-venv",
+  "language": "Chinese",
+  "min_record_seconds": 0.25,
+  "pw_record": {
+    "rate": 16000,
+    "channels": 1,
+    "format": "s16"
+  },
+  "type_command": "wtype",
+  "copy_to_clipboard": false,
+  "type_text": true,
+  "fcitx_commit": true,
+  "fcitx_socket": null,
+  "fcitx_commit_timeout_ms": 500,
+  "notify": true,
+  "notify_timeout_ms": 1200,
+  "strip_trailing_punctuation": false
+}
