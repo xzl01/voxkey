@@ -20,6 +20,7 @@ Qwen3-ASR-*-gguf.zip
 
 # Native build output
 /fcitx-addon/build/
+/target/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
@@ -27,6 +28,12 @@ install_manifest.txt
 Makefile
 *.o
 *.so
+
+# Frontend build output
+node_modules/
+dist/
+.pnpm-store/
+apps/*/src-tauri/gen/
 
 # Local editor/agent scratch directories
 /.agents/

@@ -8,7 +8,7 @@
     "name": "voice input key",
     "mode": "hold"
   },
-  "recordings_dir": "$HOME/.local/share/qwen-voice-input/recordings",
+  "recordings_dir": "$HOME/.local/share/voxkey/recordings",
   "asr_project_dir": "$HOME/AI/Model/Qwen3-ASR-GGUF",
   "model_dir": "$HOME/AI/Model/Qwen3-ASR-GGUF/model-1.7B",
   "python_venv": "$HOME/qwen3-asr-venv",

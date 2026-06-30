@@ -14,19 +14,19 @@ cmake -S "$SCRIPT_DIR" -B "$BUILD_DIR" \
 cmake --build "$BUILD_DIR"
 cmake --install "$BUILD_DIR"
 
-LIB_PATH="$PREFIX/lib/fcitx5/libqwenvoiceinput.so"
+LIB_PATH="$PREFIX/lib/fcitx5/libvoxkeyinput.so"
 if [[ ! -e "$LIB_PATH" ]]; then
-  LIB_PATH="$(find "$PREFIX" -path '*/fcitx5/libqwenvoiceinput.so' -print -quit)"
+  LIB_PATH="$(find "$PREFIX" -path '*/fcitx5/libvoxkeyinput.so' -print -quit)"
 fi
 if [[ -z "$LIB_PATH" || ! -e "$LIB_PATH" ]]; then
-  echo "Could not find installed libqwenvoiceinput.so under $PREFIX" >&2
+  echo "Could not find installed libvoxkeyinput.so under $PREFIX" >&2
   exit 1
 fi
 
 CONF_DIR="$HOME/.local/share/fcitx5/addon"
 mkdir -p "$CONF_DIR"
 sed "s|^Library=.*|Library=${LIB_PATH%.so}|" \
-  "$SCRIPT_DIR/qwenvoiceinput.conf" > "$CONF_DIR/qwenvoiceinput.conf"
+  "$SCRIPT_DIR/voxkeyinput.conf" > "$CONF_DIR/voxkeyinput.conf"
 
-echo "Installed fcitx5 addon config: $CONF_DIR/qwenvoiceinput.conf"
+echo "Installed fcitx5 addon config: $CONF_DIR/voxkeyinput.conf"
 echo "Restart fcitx5 with: fcitx5 -rd"

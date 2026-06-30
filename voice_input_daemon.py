@@ -165,12 +165,12 @@ def runtime_dir() -> Path:
 def fcitx_socket_path(cfg: Config) -> Path:
     if cfg.fcitx_socket:
         return Path(cfg.fcitx_socket).expanduser()
-    return runtime_dir() / "qwen-voice-input-fcitx.sock"
+    return runtime_dir() / "voxkey-fcitx.sock"
 
 
 def send_fcitx_request(cfg: Config, payload: bytes, *, reply_size: int = 256) -> tuple[bool, str]:
     server_path = fcitx_socket_path(cfg)
-    client_path = runtime_dir() / f"qwen-voice-input-client-{os.getpid()}-{time.monotonic_ns()}.sock"
+    client_path = runtime_dir() / f"voxkey-client-{os.getpid()}-{time.monotonic_ns()}.sock"
     timeout = max(cfg.fcitx_commit_timeout_ms, 1) / 1000.0
 
     try:
@@ -346,7 +346,7 @@ def notify(cfg: Config, title: str, body: str = "") -> None:
         return
     args = [
         "notify-send",
-        "--app-name", "Qwen Voice Input",
+        "--app-name", "简听输入",
         "--expire-time", str(cfg.notify_timeout_ms),
         title,
     ]
@@ -633,7 +633,7 @@ def run_daemon(cfg: Config) -> int:
 
 def main() -> int:
     default_config = Path(__file__).resolve().with_name("config.json")
-    parser = argparse.ArgumentParser(description="Qwen3-ASR push-to-talk voice input daemon")
+    parser = argparse.ArgumentParser(description="VoxKey push-to-talk voice input daemon")
     parser.add_argument("--config", default=os.environ.get("QWEN_VOICE_INPUT_CONFIG", str(default_config)))
     parser.add_argument("--self-test", action="store_true")
     parser.add_argument("--ping-fcitx", action="store_true")

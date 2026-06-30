@@ -1,0 +1,16 @@
+{
+  "name": "voxkey",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "dev": "pnpm desktop:dev",
+    "web:dev": "pnpm --filter @voxkey/desktop-ui web:dev",
+    "desktop:dev": "pnpm --filter @voxkey/desktop-ui tauri dev",
+    "build": "pnpm --filter @voxkey/desktop-ui build",
+    "desktop:build": "pnpm --filter @voxkey/desktop-ui tauri build",
+    "typecheck": "pnpm --filter @voxkey/desktop-ui typecheck",
+    "service:dev": "python3 services/asr-service/main.py",
+    "check": "pnpm typecheck && cargo check --workspace"
+  }
+}

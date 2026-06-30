@@ -1,0 +1,20 @@
+[package]
+name = "voxkey-desktop"
+version = "0.1.0"
+description = "Cross-platform desktop shell for Jian Ting Input"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "voxkey_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+voxkey-core = { path = "../../../crates/voxkey-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }

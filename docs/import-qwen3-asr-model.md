@@ -26,10 +26,10 @@ $HOME/AI/
 ```bash
 python3 -m venv "$HOME/qwen3-asr-venv"
 "$HOME/qwen3-asr-venv/bin/pip" install --upgrade pip
-"$HOME/qwen3-asr-venv/bin/pip" install -r "$HOME/AI/VoiceInput/requirements-asr.txt"
+"$HOME/qwen3-asr-venv/bin/pip" install -r "$HOME/AI/VoxKey/requirements-asr.txt"
 ```
 
-如果你的仓库路径不是 `$HOME/AI/VoiceInput`，把命令里的路径替换为实际位置。
+如果你的仓库路径不是 `$HOME/AI/VoxKey`，把命令里的路径替换为实际位置。
 
 ## 2. 拉取 Qwen3-ASR-GGUF 项目
 
@@ -129,7 +129,7 @@ LD_LIBRARY_PATH=$QWEN_ASR_PROJECT_DIR/qwen_asr_gguf/inference/bin:$LD_LIBRARY_PA
 复制示例配置：
 
 ```bash
-cd "$HOME/AI/VoiceInput"
+cd "$HOME/AI/VoxKey"
 cp config.example.json config.json
 ```
 
@@ -168,7 +168,7 @@ pw-record --rate 16000 --channels 1 --format s16 /tmp/qwen-test.wav
 按 `Ctrl+C` 停止后，用 VoiceInput 入口转写：
 
 ```bash
-cd "$HOME/AI/VoiceInput"
+cd "$HOME/AI/VoxKey"
 ./run.sh --transcribe-file /tmp/qwen-test.wav
 ```
 

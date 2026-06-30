@@ -1,0 +1,11 @@
+[workspace]
+members = [
+  "apps/desktop-ui/src-tauri",
+  "crates/voxkey-core",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/xzl01/voxkey"

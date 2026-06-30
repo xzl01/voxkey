@@ -175,17 +175,17 @@ PONG
 
 ## 6. systemd user 服务
 
-本仓库提供的 service 默认安装路径是 `%h/AI/VoiceInput`。如果仓库放在其他位置，先编辑 `systemd/user/qwen-voice-input.service`。
+本仓库提供的 service 默认安装路径是 `%h/AI/VoxKey`。如果仓库放在其他位置，先编辑 `systemd/user/voxkey.service`。
 
 ```bash
 mkdir -p "$HOME/.config/systemd/user"
-cp systemd/user/qwen-voice-input.service "$HOME/.config/systemd/user/"
+cp systemd/user/voxkey.service "$HOME/.config/systemd/user/"
 systemctl --user daemon-reload
-systemctl --user enable --now qwen-voice-input.service
+systemctl --user enable --now voxkey.service
 ```
 
 日志：
 
 ```bash
-journalctl --user -u qwen-voice-input.service -f
+journalctl --user -u voxkey.service -f
 ```

@@ -3,15 +3,15 @@ SPDX-FileCopyrightText: 2026 HarryLoong
 SPDX-License-Identifier: MIT
 -->
 
-# fcitx5 Qwen Voice Input Addon
+# fcitx5 VoxKey Addon
 
-This addon is a small local IPC bridge for Qwen Voice Input. Python records
+This addon is a small local IPC bridge for VoxKey. Python records
 audio and runs ASR; this C++ addon owns the fcitx5 commit path.
 
 It listens on:
 
 ```text
-$XDG_RUNTIME_DIR/qwen-voice-input-fcitx.sock
+$XDG_RUNTIME_DIR/voxkey-fcitx.sock
 ```
 
 Protocol:

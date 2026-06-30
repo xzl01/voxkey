@@ -67,7 +67,7 @@ def write_config(path: Path, data: dict):
 def minimal_raw_config(**overrides):
     data = {
         "trigger": {"enabled": False},
-        "recordings_dir": "$HOME/.local/share/qwen-voice-input/recordings",
+        "recordings_dir": "$HOME/.local/share/voxkey/recordings",
         "asr_project_dir": "$HOME/AI/Model/Qwen3-ASR-GGUF",
         "model_dir": "model-1.7B",
         "python_venv": "$HOME/qwen3-asr-venv",
@@ -101,7 +101,7 @@ class ConfigLoadingTests(unittest.TestCase):
             self.assertEqual(cfg.trigger.backend, "evdev")
             self.assertIsNone(cfg.trigger.input_device)
             self.assertIsNone(cfg.trigger.code)
-            self.assertEqual(cfg.recordings_dir, "/home/tester/.local/share/qwen-voice-input/recordings")
+            self.assertEqual(cfg.recordings_dir, "/home/tester/.local/share/voxkey/recordings")
             self.assertEqual(cfg.asr_project_dir, "/home/tester/AI/Model/Qwen3-ASR-GGUF")
             self.assertEqual(cfg.python_venv, "/home/tester/qwen3-asr-venv")
             self.assertEqual(cfg.model_dir, str(config_path.parent / "model-1.7B"))
@@ -253,7 +253,7 @@ class DaemonRunTests(unittest.TestCase):
         cfg = make_config(
             trigger=daemon.TriggerConfig(
                 enabled=True,
-                input_device="/tmp/qwen-voice-input-missing-event",
+                input_device="/tmp/voxkey-missing-event",
                 code=193,
             )
         )

@@ -25,7 +25,7 @@
 
 namespace {
 
-constexpr const char *kSocketName = "qwen-voice-input-fcitx.sock";
+constexpr const char *kSocketName = "voxkey-fcitx.sock";
 constexpr size_t kMaxMessageSize = 65536;
 constexpr std::string_view kCommitCommand = "COMMIT\n";
 constexpr uint64_t kDuplicateCommitSuppressUs = 250000;
@@ -74,14 +74,14 @@ Request parseRequest(const std::string &message) {
     return {Request::Type::Commit, message};
 }
 
-class QwenVoiceInput final : public fcitx::AddonInstance {
+class VoxKeyInput final : public fcitx::AddonInstance {
 public:
-    explicit QwenVoiceInput(fcitx::AddonManager *manager)
+    explicit VoxKeyInput(fcitx::AddonManager *manager)
         : instance_(manager->instance()) {
         setupSocket();
     }
 
-    ~QwenVoiceInput() override {
+    ~VoxKeyInput() override {
         ioEvent_.reset();
         if (fd_ >= 0) {
             close(fd_);
@@ -97,14 +97,14 @@ private:
         socketPath_ = socketPath();
         sockaddr_un addr {};
         if (socketPath_.size() >= sizeof(addr.sun_path)) {
-            FCITX_ERROR() << "Qwen voice input socket path is too long: "
+            FCITX_ERROR() << "VoxKey socket path is too long: "
                           << socketPath_;
             return;
         }
 
         fd_ = socket(AF_UNIX, SOCK_DGRAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
         if (fd_ < 0) {
-            FCITX_ERROR() << "Qwen voice input failed to create socket: "
+            FCITX_ERROR() << "VoxKey failed to create socket: "
                           << strerror(errno);
             return;
         }
@@ -115,7 +115,7 @@ private:
 
         unlink(socketPath_.c_str());
         if (bind(fd_, reinterpret_cast<sockaddr *>(&addr), sizeof(addr)) < 0) {
-            FCITX_ERROR() << "Qwen voice input failed to bind " << socketPath_
+            FCITX_ERROR() << "VoxKey failed to bind " << socketPath_
                           << ": " << strerror(errno);
             close(fd_);
             fd_ = -1;
@@ -129,14 +129,14 @@ private:
             [this](fcitx::EventSourceIO *, int fd, fcitx::IOEventFlags flags) {
                 return handleReadable(fd, flags);
             });
-        FCITX_INFO() << "Qwen voice input fcitx socket listening on "
+        FCITX_INFO() << "VoxKey fcitx socket listening on "
                      << socketPath_;
     }
 
     bool handleReadable(int fd, fcitx::IOEventFlags flags) {
         if (flags.testAny(fcitx::IOEventFlag::Err) ||
             flags.testAny(fcitx::IOEventFlag::Hup)) {
-            FCITX_WARN() << "Qwen voice input socket event error/hangup";
+            FCITX_WARN() << "VoxKey socket event error/hangup";
         }
 
         while (true) {
@@ -151,7 +151,7 @@ private:
                 if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     return true;
                 }
-                FCITX_WARN() << "Qwen voice input recvfrom failed: "
+                FCITX_WARN() << "VoxKey recvfrom failed: "
                              << strerror(errno);
                 return true;
             }
@@ -200,7 +200,7 @@ private:
             lastCommittedFrontend_ == frontend &&
             now >= lastCommitTimeUs_ &&
             now - lastCommitTimeUs_ < kDuplicateCommitSuppressUs) {
-            FCITX_WARN() << "Qwen voice input suppressed duplicate commit: "
+            FCITX_WARN() << "VoxKey suppressed duplicate commit: "
                          << text;
             return;
         }
@@ -217,7 +217,7 @@ private:
         lastCommittedFrontend_ = frontend;
         lastCommittedText_ = text;
         lastCommitTimeUs_ = now;
-        FCITX_INFO() << "Qwen voice input committed text via fcitx: " << text;
+        FCITX_INFO() << "VoxKey committed text via fcitx: " << text;
     }
 
     void reply(const sockaddr_un &peer, socklen_t peerLen,
@@ -227,7 +227,7 @@ private:
         }
         if (sendto(fd_, message, strlen(message), 0,
                    reinterpret_cast<const sockaddr *>(&peer), peerLen) < 0) {
-            FCITX_WARN() << "Qwen voice input reply failed: "
+            FCITX_WARN() << "VoxKey reply failed: "
                          << strerror(errno);
         }
     }
@@ -244,13 +244,13 @@ private:
     uint64_t lastCommitTimeUs_ = 0;
 };
 
-class QwenVoiceInputFactory final : public fcitx::AddonFactory {
+class VoxKeyInputFactory final : public fcitx::AddonFactory {
 public:
     fcitx::AddonInstance *create(fcitx::AddonManager *manager) override {
-        return new QwenVoiceInput(manager);
+        return new VoxKeyInput(manager);
     }
 };
 
 } // namespace
 
-FCITX_ADDON_FACTORY(QwenVoiceInputFactory)
+FCITX_ADDON_FACTORY(VoxKeyInputFactory)

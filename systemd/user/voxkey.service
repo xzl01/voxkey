@@ -2,13 +2,13 @@
 # SPDX-License-Identifier: MIT
 
 [Unit]
-Description=Qwen3-ASR push-to-talk voice input
+Description=VoxKey local voice input
 After=graphical-session.target pipewire.service
 
 [Service]
 Type=simple
-WorkingDirectory=%h/AI/VoiceInput
-ExecStart=%h/AI/VoiceInput/run.sh
+WorkingDirectory=%h/AI/VoxKey
+ExecStart=%h/AI/VoxKey/run.sh
 Restart=on-failure
 RestartSec=2
 

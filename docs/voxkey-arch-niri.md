@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 HarryLoong
 SPDX-License-Identifier: MIT
 -->
 
-# Qwen3-ASR 语音输入工具：Arch Linux + niri
+# VoxKey 语音输入工具：Arch Linux + niri
 
 > 说明：本文是从本机部署记录导入的历史文档，包含当时的 `/home/xzl/...` 路径和服务状态。仓库化后的通用安装方式以根目录 `README.md` 和 `INSTALL.md` 为准。
 
@@ -27,7 +27,7 @@ SPDX-License-Identifier: MIT
 ### 语音输入工具
 
 ```text
-/home/xzl/AI/VoiceInput/
+/home/xzl/AI/VoxKey/
 ├── config.json
 ├── voice_input_daemon.py
 ├── run.sh
@@ -38,19 +38,19 @@ SPDX-License-Identifier: MIT
 ### systemd user service
 
 ```text
-/home/xzl/.config/systemd/user/qwen-voice-input.service
+/home/xzl/.config/systemd/user/voxkey.service
 ```
 
 当前 service 内容：
 
 ```ini
 [Unit]
-Description=Qwen3-ASR push-to-talk voice input
+Description=VoxKey local voice input
 After=graphical-session.target pipewire.service
 
 [Service]
 Type=simple
-ExecStart=/home/xzl/AI/VoiceInput/run.sh
+ExecStart=/home/xzl/AI/VoxKey/run.sh
 Restart=on-failure
 RestartSec=2
 
@@ -77,7 +77,7 @@ llama/Vulkan .so：/home/xzl/AI/Model/Qwen3-ASR-GGUF/qwen_asr_gguf/inference/bin
 
 ## 当前配置
 
-`/home/xzl/AI/VoiceInput/config.json` 当前关键配置：
+`/home/xzl/AI/VoxKey/config.json` 当前关键配置：
 
 ```json
 {
@@ -85,7 +85,7 @@ llama/Vulkan .so：/home/xzl/AI/Model/Qwen3-ASR-GGUF/qwen_asr_gguf/inference/bin
   "trigger_code": 193,
   "trigger_name": "Lenovo voice input key / code 193",
   "trigger_mode": "hold",
-  "recordings_dir": "/home/xzl/AI/VoiceInput/recordings",
+  "recordings_dir": "/home/xzl/AI/VoxKey/recordings",
   "asr_project_dir": "/home/xzl/AI/Model/Qwen3-ASR-GGUF",
   "model_dir": "/home/xzl/AI/Model/Qwen3-ASR-GGUF/model-1.7B",
   "python_venv": "/home/xzl/qwen3-asr-venv",
@@ -107,7 +107,7 @@ llama/Vulkan .so：/home/xzl/AI/Model/Qwen3-ASR-GGUF/qwen_asr_gguf/inference/bin
 
 ## 运行方式
 
-> 当前已合并到统一用户级监听服务：`custom-key-daemon.service`。如果只想临时单独测试语音输入，仍可运行 `/home/xzl/AI/VoiceInput/run.sh`。
+> 当前已合并到统一用户级监听服务：`custom-key-daemon.service`。如果只想临时单独测试语音输入，仍可运行 `/home/xzl/AI/VoxKey/run.sh`。
 
 统一监听器位置：
 
@@ -131,12 +131,12 @@ llama/Vulkan .so：/home/xzl/AI/Model/Qwen3-ASR-GGUF/qwen_asr_gguf/inference/bin
 护眼：/dev/input/event6  code=202 press -> /home/xzl/.local/bin/toggle-eye-care
 ```
 
-旧的用户级护眼监听服务 `eye-key-listener.service` 已停用，避免重复触发。旧的单独听写服务 `qwen-voice-input.service` 当前也是 inactive/disabled。
+旧的用户级护眼监听服务 `eye-key-listener.service` 已停用，避免重复触发。旧的单独听写服务 `voxkey.service` 当前也是 inactive/disabled。
 
 手动运行：
 
 ```bash
-/home/xzl/AI/VoiceInput/run.sh
+/home/xzl/AI/VoxKey/run.sh
 ```
 
 启动后应看到类似：
@@ -160,7 +160,7 @@ Listening for Lenovo voice input key / code 193 code=193 mode=hold on /dev/input
 ## 自检命令
 
 ```bash
-/home/xzl/AI/VoiceInput/run.sh --self-test
+/home/xzl/AI/VoxKey/run.sh --self-test
 ```
 
 期望结果包括：
@@ -180,7 +180,7 @@ Listening for Lenovo voice input key / code 193 code=193 mode=hold on /dev/input
 ## 单独测试通知
 
 ```bash
-notify-send --app-name "Qwen Voice Input" --expire-time 3000 "测试通知" "如果看到这个，通知没问题"
+notify-send --app-name "简听输入" --expire-time 3000 "测试通知" "如果看到这个，通知没问题"
 ```
 
 如果看不到通知，问题在通知系统或通知 daemon，不一定是语音输入脚本。
@@ -204,7 +204,7 @@ ls -lh /tmp/qwen-test.wav
 转写：
 
 ```bash
-/home/xzl/AI/VoiceInput/run.sh --transcribe-file /tmp/qwen-test.wav
+/home/xzl/AI/VoxKey/run.sh --transcribe-file /tmp/qwen-test.wav
 ```
 
 如果这里能输出文字，说明模型、录音、转写链路正常。
@@ -238,14 +238,14 @@ ls -lh /tmp/qwen-test.wav
 运行：
 
 ```bash
-/home/xzl/AI/VoiceInput/run.sh
+/home/xzl/AI/VoxKey/run.sh
 ```
 
 按住目标键时，应看到：
 
 ```text
 Trigger event: DOWN (1)
-Recording started: /home/xzl/AI/VoiceInput/recordings/voice-....wav
+Recording started: /home/xzl/AI/VoxKey/recordings/voice-....wav
 Trigger event: REPEAT (2)
 ```
 
@@ -253,7 +253,7 @@ Trigger event: REPEAT (2)
 
 ```text
 Trigger event: UP (0)
-Recording stopped (...s): /home/xzl/AI/VoiceInput/recordings/voice-....wav
+Recording stopped (...s): /home/xzl/AI/VoxKey/recordings/voice-....wav
 Transcribed: ...
 Typed text: ...
 ```
@@ -292,26 +292,26 @@ journalctl --user -u custom-key-daemon.service -f
 
 ```bash
 systemctl --user daemon-reload
-systemctl --user enable --now qwen-voice-input.service
-systemctl --user status qwen-voice-input.service --no-pager
+systemctl --user enable --now voxkey.service
+systemctl --user status voxkey.service --no-pager
 ```
 
 查看日志：
 
 ```bash
-journalctl --user -u qwen-voice-input.service -f
+journalctl --user -u voxkey.service -f
 ```
 
 停止服务：
 
 ```bash
-systemctl --user stop qwen-voice-input.service
+systemctl --user stop voxkey.service
 ```
 
 禁用自启动：
 
 ```bash
-systemctl --user disable qwen-voice-input.service
+systemctl --user disable voxkey.service
 ```
 
 ## 已踩坑记录
@@ -390,12 +390,12 @@ Recording stopped (...s): /path/to/voice.wav
 
 ## 关键环境变量
 
-`/home/xzl/AI/VoiceInput/run.sh` 设置：
+`/home/xzl/AI/VoxKey/run.sh` 设置：
 
 ```bash
 export GGML_VK_DISABLE_F16=1
 export LD_LIBRARY_PATH="/home/xzl/AI/Model/Qwen3-ASR-GGUF/qwen_asr_gguf/inference/bin:${LD_LIBRARY_PATH:-}"
-exec /home/xzl/qwen3-asr-venv/bin/python3 /home/xzl/AI/VoiceInput/voice_input_daemon.py "$@"
+exec /home/xzl/qwen3-asr-venv/bin/python3 /home/xzl/AI/VoxKey/voice_input_daemon.py "$@"
 ```
 
 `GGML_VK_DISABLE_F16=1` 保留，用来规避 Vulkan F16 相关问题。

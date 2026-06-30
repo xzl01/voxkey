@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 HarryLoong
 SPDX-License-Identifier: MIT
 -->
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
-  <title id="title">Qwen Voice Input architecture</title>
+  <title id="title">VoxKey architecture</title>
   <desc id="desc">Architecture diagram showing a user configured key trigger, PipeWire recording, Qwen3-ASR-GGUF transcription, and text commit through fcitx5 with wtype fallback.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
@@ -34,7 +34,7 @@ SPDX-License-Identifier: MIT
   </defs>
 
   <rect width="1280" height="640" fill="url(#bg)"/>
-  <text x="80" y="78" class="title">Qwen Voice Input</text>
+  <text x="80" y="78" class="title">VoxKey</text>
   <text x="80" y="112" class="subtitle">Local push-to-talk speech input for Linux / Wayland with explicit user key binding.</text>
 
   <rect x="80" y="172" width="220" height="150" class="box box-accent"/>
