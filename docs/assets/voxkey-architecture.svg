@@ -2,72 +2,125 @@
 SPDX-FileCopyrightText: 2026 HarryLoong
 SPDX-License-Identifier: MIT
 -->
-<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="title desc">
-  <title id="title">VoxKey architecture</title>
-  <desc id="desc">Architecture diagram showing a user configured key trigger, PipeWire recording, Qwen3-ASR-GGUF transcription, and text commit through fcitx5 with wtype fallback.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" role="img" aria-labelledby="title desc">
+  <title id="title">VoxKey cross-platform architecture</title>
+  <desc id="desc">Architecture diagram showing the VoxKey desktop app, core orchestration layer, platform adapters for Windows, Linux, and macOS, a local ASR service, and optional CPU, GPU, and NPU runtime packages.</desc>
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#f7fafc"/>
-      <stop offset="48%" stop-color="#eef6f3"/>
-      <stop offset="100%" stop-color="#f8f4ec"/>
+      <stop offset="0%" stop-color="#f6f8fb"/>
+      <stop offset="52%" stop-color="#eef7f4"/>
+      <stop offset="100%" stop-color="#fff8ea"/>
     </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="12" stdDeviation="12" flood-color="#2f3b45" flood-opacity="0.16"/>
+    <filter id="shadow" x="-18%" y="-18%" width="136%" height="136%">
+      <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="#203040" flood-opacity="0.14"/>
     </filter>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#53616d"/>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4d5d69"/>
     </marker>
     <style>
-      .title { font: 700 38px sans-serif; fill: #1f2a33; }
-      .subtitle { font: 400 18px sans-serif; fill: #52606b; }
-      .node-title { font: 700 22px sans-serif; fill: #1f2a33; }
-      .node-text { font: 400 15px sans-serif; fill: #52606b; }
-      .label { font: 700 13px sans-serif; fill: #36505f; letter-spacing: .04em; }
-      .box { fill: #ffffff; stroke: #d7e0e7; stroke-width: 1.5; rx: 18; filter: url(#shadow); }
-      .box-accent { fill: #ecf7f3; stroke: #9ed4c0; }
-      .box-output { fill: #fff7e8; stroke: #e2bf78; }
-      .line { stroke: #53616d; stroke-width: 3; fill: none; marker-end: url(#arrow); }
-      .muted-line { stroke: #9aa7b2; stroke-width: 2.4; stroke-dasharray: 7 8; fill: none; marker-end: url(#arrow); }
-      .pill { fill: #23323d; rx: 12; }
-      .pill-text { font: 700 13px sans-serif; fill: #ffffff; }
+      text { font-family: Arial, Helvetica, sans-serif; }
+      .title { font-size: 38px; font-weight: 700; fill: #1f2a33; }
+      .subtitle { font-size: 18px; font-weight: 400; fill: #52606b; }
+      .section { font-size: 13px; font-weight: 700; fill: #5a6b77; letter-spacing: .05em; }
+      .node-title { font-size: 21px; font-weight: 700; fill: #1f2a33; }
+      .node-text { font-size: 15px; font-weight: 400; fill: #52606b; }
+      .small { font-size: 13px; font-weight: 400; fill: #5d6c76; }
+      .pill-text { font-size: 12px; font-weight: 700; fill: #ffffff; }
+      .card { fill: #ffffff; stroke: #d7e0e7; stroke-width: 1.5; filter: url(#shadow); }
+      .card-ui { fill: #eaf3ff; stroke: #9cbfe5; }
+      .card-core { fill: #ecf7f3; stroke: #93cbb8; }
+      .card-service { fill: #fff7e8; stroke: #dfbd72; }
+      .card-adapter { fill: #fbfdff; stroke: #d5e0e7; }
+      .card-backend { fill: #f4f0fa; stroke: #baa7d3; }
+      .line { stroke: #4d5d69; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .line-soft { stroke: #8c9aa5; stroke-width: 2.4; stroke-dasharray: 7 8; fill: none; marker-end: url(#arrow); }
+      .divider { stroke: #d9e2e8; stroke-width: 1.4; }
+      .pill-blue { fill: #315c96; }
+      .pill-green { fill: #2e735f; }
+      .pill-gold { fill: #8a6420; }
+      .pill-purple { fill: #6c4f96; }
     </style>
   </defs>
 
-  <rect width="1280" height="640" fill="url(#bg)"/>
-  <text x="80" y="78" class="title">VoxKey</text>
-  <text x="80" y="112" class="subtitle">Local push-to-talk speech input for Linux / Wayland with explicit user key binding.</text>
+  <rect width="1280" height="760" fill="url(#bg)"/>
 
-  <rect x="80" y="172" width="220" height="150" class="box box-accent"/>
-  <text x="108" y="218" class="node-title">User trigger</text>
-  <text x="108" y="250" class="node-text">disabled by default</text>
-  <text x="108" y="276" class="node-text">detect-key writes config</text>
-  <rect x="108" y="286" width="106" height="28" class="pill"/>
-  <text x="124" y="305" class="pill-text">evdev hold</text>
+  <text x="72" y="68" class="title">VoxKey</text>
+  <text x="72" y="102" class="subtitle">Cross-platform local voice input: lightweight app first, hardware-specific runtimes installed after first launch.</text>
 
-  <rect x="380" y="172" width="220" height="150" class="box"/>
-  <text x="408" y="218" class="node-title">PipeWire</text>
-  <text x="408" y="250" class="node-text">pw-record captures</text>
-  <text x="408" y="276" class="node-text">16 kHz mono WAV</text>
+  <text x="72" y="150" class="section">PRODUCT SHELL</text>
+  <rect x="72" y="170" width="300" height="126" rx="18" class="card card-ui"/>
+  <text x="102" y="211" class="node-title">Desktop UI</text>
+  <text x="102" y="241" class="node-text">Tauri native shell</text>
+  <text x="102" y="266" class="node-text">React renderer inside the app</text>
+  <rect x="102" y="276" width="104" height="24" rx="12" class="pill-blue"/>
+  <text x="121" y="292" class="pill-text">no web app</text>
 
-  <rect x="680" y="172" width="250" height="150" class="box"/>
-  <text x="708" y="218" class="node-title">Qwen3-ASR-GGUF</text>
-  <text x="708" y="250" class="node-text">ONNX encoder on CPU</text>
-  <text x="708" y="276" class="node-text">GGUF decoder via Vulkan</text>
+  <text x="430" y="150" class="section">ORCHESTRATION</text>
+  <rect x="430" y="170" width="360" height="126" rx="18" class="card card-core"/>
+  <text x="460" y="211" class="node-title">Core</text>
+  <text x="460" y="241" class="node-text">config, permissions, runtime detection</text>
+  <text x="460" y="266" class="node-text">model manager and service lifecycle</text>
+  <rect x="460" y="276" width="132" height="24" rx="12" class="pill-green"/>
+  <text x="480" y="292" class="pill-text">shared logic</text>
 
-  <rect x="1010" y="172" width="190" height="150" class="box box-output"/>
-  <text x="1038" y="218" class="node-title">Text commit</text>
-  <text x="1038" y="250" class="node-text">fcitx5 addon first</text>
-  <text x="1038" y="276" class="node-text">wtype fallback</text>
+  <text x="848" y="150" class="section">LOCAL INFERENCE</text>
+  <rect x="848" y="170" width="360" height="126" rx="18" class="card card-service"/>
+  <text x="878" y="211" class="node-title">ASR Service</text>
+  <text x="878" y="241" class="node-text">stable local API for transcription</text>
+  <text x="878" y="266" class="node-text">loads selected model and backend</text>
+  <rect x="878" y="276" width="118" height="24" rx="12" class="pill-gold"/>
+  <text x="897" y="292" class="pill-text">local only</text>
 
-  <path d="M 300 247 L 365 247" class="line"/>
-  <path d="M 600 247 L 665 247" class="line"/>
-  <path d="M 930 247 L 995 247" class="line"/>
+  <path d="M 372 233 L 416 233" class="line"/>
+  <path d="M 790 233 L 834 233" class="line"/>
 
-  <rect x="232" y="390" width="820" height="112" class="box"/>
-  <text x="264" y="432" class="node-title">Repository boundary</text>
-  <text x="264" y="465" class="node-text">This repo ships the daemon, fcitx5 bridge, docs, tests, and install templates.</text>
-  <text x="264" y="491" class="node-text">Model weights, recordings, virtual environments, and llama.cpp builds stay outside Git.</text>
+  <text x="72" y="350" class="section">PLATFORM ADAPTERS</text>
+  <rect x="72" y="370" width="1136" height="178" rx="18" class="card card-adapter"/>
 
-  <path d="M 805 322 C 805 364 750 378 704 390" class="muted-line"/>
-  <text x="842" y="366" class="label">external model files</text>
+  <rect x="102" y="400" width="320" height="128" rx="14" fill="#ffffff" stroke="#d7e0e7"/>
+  <text x="128" y="435" class="node-title">Windows</text>
+  <text x="128" y="464" class="node-text">Trigger: global hotkey</text>
+  <text x="128" y="489" class="node-text">Audio: WASAPI</text>
+  <text x="128" y="514" class="small">Commit: UI Automation / TSF / clipboard</text>
+
+  <rect x="480" y="400" width="320" height="128" rx="14" fill="#ffffff" stroke="#d7e0e7"/>
+  <text x="506" y="435" class="node-title">Linux</text>
+  <text x="506" y="464" class="node-text">Trigger: portal or evdev fallback</text>
+  <text x="506" y="489" class="node-text">Audio: PipeWire portal / pw-record</text>
+  <text x="506" y="514" class="small">Commit: fcitx5 / portal / wtype fallback</text>
+
+  <rect x="858" y="400" width="320" height="128" rx="14" fill="#ffffff" stroke="#d7e0e7"/>
+  <text x="884" y="435" class="node-title">macOS</text>
+  <text x="884" y="464" class="node-text">Trigger: global hotkey / event tap</text>
+  <text x="884" y="489" class="node-text">Audio: AVFoundation / CoreAudio</text>
+  <text x="884" y="514" class="small">Commit: Accessibility / pasteboard fallback</text>
+
+  <line x1="640" y1="336" x2="640" y2="370" class="line-soft"/>
+  <text x="675" y="358" class="small">platform-specific capture and text commit</text>
+
+  <text x="72" y="602" class="section">OPTIONAL RUNTIME PACKAGES</text>
+  <rect x="72" y="622" width="1136" height="102" rx="18" class="card card-backend"/>
+
+  <rect x="118" y="644" width="300" height="58" rx="16" fill="#ffffff" stroke="#cabbe0"/>
+  <text x="146" y="667" class="node-title">CPU baseline</text>
+  <text x="146" y="689" class="small">compatibility first</text>
+
+  <rect x="490" y="644" width="300" height="58" rx="16" fill="#ffffff" stroke="#cabbe0"/>
+  <text x="518" y="667" class="node-title">GPU package</text>
+  <text x="518" y="689" class="small">Vulkan / Metal / DirectML</text>
+
+  <rect x="862" y="644" width="300" height="58" rx="16" fill="#ffffff" stroke="#cabbe0"/>
+  <text x="890" y="667" class="node-title">NPU package</text>
+  <text x="890" y="689" class="small">OpenVINO / QNN / Core ML</text>
+
+  <path d="M 1028 296 C 1028 332 1020 350 1018 370" class="line-soft"/>
+  <path d="M 1028 548 C 1028 584 1028 598 1030 622" class="line-soft"/>
+  <text x="1060" y="590" class="small">download after hardware scan</text>
+
+  <line x1="222" y1="548" x2="222" y2="622" class="line-soft"/>
+  <line x1="640" y1="548" x2="640" y2="622" class="line-soft"/>
+  <line x1="1018" y1="548" x2="1018" y2="622" class="line-soft"/>
+
+  <rect x="72" y="724" width="1136" height="1" fill="#d9e2e8"/>
+  <text x="72" y="744" class="small">Model weights, downloaded runtimes, recordings, and local configuration stay outside Git.</text>
 </svg>
