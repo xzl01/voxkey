@@ -117,6 +117,23 @@ button {
   color: #334038;
   background: #fff;
   font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.status-pill.online {
+  border-color: #a8d6b6;
+  color: #226435;
+  background: #f0f9f2;
+}
+
+.status-pill.offline {
+  border-color: #e2c5a6;
+  color: #8a5419;
+  background: #fff7ec;
 }
 
 .setup-grid {
@@ -222,6 +239,87 @@ button {
   color: #fff;
   padding: 11px 14px;
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.primary-action:disabled {
+  cursor: default;
+  background: #a7b6aa;
+}
+
+.inline-error {
+  margin: 10px 0 0;
+  color: #9a3d2d;
+  font-size: 13px;
+}
+
+.service-strip {
+  margin-top: 20px;
+  border: 1px solid #d8dfda;
+  border-radius: 8px;
+  background: #fff;
+  padding: 18px 20px;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(320px, 1.4fr) auto;
+  align-items: center;
+  gap: 18px;
+}
+
+.service-strip h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.service-strip p {
+  margin: 5px 0 0;
+  color: #68756d;
+  font-size: 13px;
+}
+
+.service-state {
+  display: grid;
+  grid-template-columns: 10px auto;
+  column-gap: 10px;
+  row-gap: 3px;
+  align-items: center;
+}
+
+.service-state strong {
+  text-transform: capitalize;
+}
+
+.service-state small {
+  grid-column: 2;
+  color: #68756d;
+}
+
+.service-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #c0883f;
+}
+
+.service-dot.online {
+  background: #2f9e4c;
+}
+
+.service-dot.offline {
+  background: #c0883f;
+}
+
+.icon-action {
+  width: 38px;
+  height: 38px;
+  border: 1px solid #d8dfda;
+  border-radius: 7px;
+  background: #fbfdfb;
+  color: #24342c;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
 }
 
 @media (max-width: 900px) {
@@ -235,5 +333,13 @@ button {
 
   .setup-grid {
     grid-template-columns: 1fr;
+  }
+
+  .service-strip {
+    grid-template-columns: 1fr auto;
+  }
+
+  .service-state {
+    grid-column: 1 / -1;
   }
 }

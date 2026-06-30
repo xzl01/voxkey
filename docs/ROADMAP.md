@@ -58,6 +58,14 @@ Exit criteria:
   runtime preference without installing a model yet.
 - Unsupported runtimes explain why they are unavailable.
 
+Iteration 1, 2026-06-30:
+
+- Added Tauri commands for loading settings, saving selected runtime, and
+  probing the local ASR service health endpoint.
+- Added desktop UI state for saved runtime preference and ASR service status.
+- Added `DesktopSettings` in `crates/voxkey-core` with tests for default local
+  service configuration.
+
 ### Phase 2: CPU Baseline End-To-End
 
 Status: next

@@ -40,6 +40,21 @@ pub struct RuntimeCandidate {
     pub notes: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DesktopSettings {
+    pub selected_runtime_id: Option<String>,
+    pub asr_service_url: String,
+}
+
+impl Default for DesktopSettings {
+    fn default() -> Self {
+        Self {
+            selected_runtime_id: None,
+            asr_service_url: "http://127.0.0.1:17863/health".into(),
+        }
+    }
+}
+
 pub fn runtime_candidates(platform: HostPlatform) -> Vec<RuntimeCandidate> {
     let mut candidates = vec![RuntimeCandidate {
         id: "cpu-onnx-llamacpp".into(),
@@ -123,4 +138,31 @@ pub fn runtime_candidates(platform: HostPlatform) -> Vec<RuntimeCandidate> {
     }
 
     candidates
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cpu_baseline_is_available_on_every_platform() {
+        for platform in [
+            HostPlatform::Windows,
+            HostPlatform::Linux,
+            HostPlatform::Macos,
+            HostPlatform::Unknown,
+        ] {
+            let candidates = runtime_candidates(platform);
+            assert!(candidates.iter().any(|candidate| {
+                candidate.id == "cpu-onnx-llamacpp" && candidate.compute == ComputeClass::Cpu
+            }));
+        }
+    }
+
+    #[test]
+    fn settings_default_to_local_service_health_url() {
+        let settings = DesktopSettings::default();
+        assert_eq!(settings.selected_runtime_id, None);
+        assert_eq!(settings.asr_service_url, "http://127.0.0.1:17863/health");
+    }
 }
