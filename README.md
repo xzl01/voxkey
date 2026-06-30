@@ -31,7 +31,7 @@ SPDX-License-Identifier: MIT
 | --- | --- |
 | OS | Arch Linux x86_64 |
 | Desktop | niri / Wayland |
-| Audio | PipeWire `pw-record` |
+| Linux audio | PipeWire `pw-record` |
 | Text commit | fcitx5 addon, fallback to `wtype` |
 | ASR | Qwen3-ASR-GGUF 1.7B |
 | GPU runtime | llama.cpp Vulkan backend |
@@ -45,7 +45,8 @@ SPDX-License-Identifier: MIT
 - 支持 `hold` 模式：按住录音，松开转写并上屏。
 - 支持 `toggle` 模式：按一次开始录音，再按一次结束并转写。
 - 支持按设备名解析 `/dev/input/event*`，降低重启后 event 编号漂移影响。
-- 支持 fcitx5 addon 原生提交文本，失败时回退到 `wtype`。
+- Linux 原型支持 fcitx5 addon 原生提交文本，失败时回退到 `wtype`。
+- 跨平台版本会通过平台适配层采集音频；PipeWire 只作为 Linux 实现之一。
 - 支持可选复制到剪贴板和桌面通知。
 - 提供单元测试，覆盖配置解析、触发键检测和文本提交 fallback。
 - 新架构已拆分为桌面 UI、共享核心、平台适配层和 ASR 服务边界。
@@ -104,7 +105,49 @@ cp config.example.json config.json
 
 ## Voice Input Call Flow
 
-Linux 原型的完整语音输入调用流程如下：
+产品级调用流程不能依赖某一个系统音频栈。VoxKey 应该把语音输入拆成统一抽象：
+
+```text
+TriggerAdapter -> AudioCaptureAdapter -> ASR service -> TextCommitAdapter
+```
+
+也就是说，核心逻辑只关心“何时开始录音、何时停止录音、拿到什么格式的音频、
+把文本提交到哪里”。具体如何录音由各平台适配器处理。
+
+```mermaid
+sequenceDiagram
+    participant User as 用户
+    participant Trigger as TriggerAdapter
+    participant Audio as AudioCaptureAdapter
+    participant Buffer as PCM/WAV buffer
+    participant ASRService as ASR service
+    participant Commit as TextCommitAdapter
+    participant App as 当前聚焦输入框
+
+    User->>Trigger: 按下或切换触发键
+    Trigger->>Audio: start_capture()
+    Audio->>Buffer: 写入统一音频格式
+    User->>Trigger: 松开或再次触发
+    Trigger->>Audio: stop_capture()
+    Audio-->>ASRService: audio buffer or temp WAV
+    ASRService-->>Commit: transcription text
+    Commit->>App: 提交文本
+```
+
+平台适配建议：
+
+| Platform | Audio capture | Preferred audio handoff | Notes |
+| --- | --- | --- | --- |
+| Windows | WASAPI | PCM stream or temp WAV | 通过系统麦克风权限；后续可用 Rust `cpal` 或原生 WASAPI 封装 |
+| macOS | AVFoundation / CoreAudio | PCM stream or temp WAV | 需要麦克风权限；文本提交另需 Accessibility 或剪贴板 fallback |
+| Linux | PipeWire / portal / `pw-record` | PCM stream or temp WAV | `pw-record` 是当前原型实现，不应泄漏到跨平台核心 |
+
+跨平台核心建议固定内部音频格式，例如 16 kHz、mono、signed 16-bit PCM。这样
+ASR service 不需要知道音频来自 PipeWire、WASAPI 还是 AVFoundation。
+
+### Current Linux Prototype Flow
+
+当前 Linux / Wayland 原型的完整语音输入调用流程如下：
 
 ```mermaid
 sequenceDiagram
@@ -459,7 +502,8 @@ pnpm check
 - fcitx5 运行时和开发库在 Arch Linux 包中标注为
   `LGPL-2.1-or-later AND Unicode-DFS-2016`；本仓库的 fcitx5 addon 源码采用
   MIT，并动态链接本机 fcitx5。
-- Python、PipeWire、wtype、wl-clipboard、libnotify 等运行时依赖遵循各自上游许可。
+- Linux 原型使用的 Python、PipeWire、wtype、wl-clipboard、libnotify 等运行时依赖
+  遵循各自上游许可。
 
 仓库内文件使用 SPDX 标注。JSON、许可证文本等不适合内嵌 SPDX 注释的文件，
 通过 `.reuse/dep5` 声明版权和许可证。
