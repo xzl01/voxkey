@@ -1,0 +1,25 @@
+.shell {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.workspace {
+  padding: var(--space-8);
+  min-width: 0;
+}
+
+.skeletonWrap {
+  display: grid;
+  gap: var(--space-4);
+}
+
+@media (max-width: 860px) {
+  .shell {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace {
+    padding: var(--space-5) var(--space-4);
+  }
+}

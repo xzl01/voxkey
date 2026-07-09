@@ -1,0 +1,45 @@
+.field {
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text-default);
+}
+
+.label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.input {
+  width: 100%;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  background: var(--bg-input);
+  color: var(--text-strong);
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 22%, transparent);
+}
+
+.input::placeholder {
+  color: var(--text-subtle);
+}
+
+.input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.hint {
+  color: var(--text-subtle);
+  font-size: var(--text-xs);
+}

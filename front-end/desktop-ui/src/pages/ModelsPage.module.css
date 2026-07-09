@@ -1,0 +1,121 @@
+.page {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.headerAside {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.banner {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--func-offline-bg);
+  color: var(--func-offline);
+  font-size: var(--text-sm);
+}
+
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+
+.card {
+  display: grid;
+  gap: var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface-2);
+  padding: var(--space-4);
+  box-shadow: var(--shadow-sm);
+}
+
+.cardHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.cardIcon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  flex: none;
+}
+
+.cardTitle {
+  min-width: 0;
+  flex: 1;
+}
+
+.cardTitle strong {
+  display: block;
+  font-weight: 600;
+}
+
+.cardTitle small {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.cardList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.cardList > div {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+.cardList dt {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+
+.cardList dd {
+  margin: 0;
+  color: var(--text-strong);
+  font-size: var(--text-sm);
+  word-break: break-all;
+}
+
+.path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: var(--text-xs) !important;
+}
+
+.spin {
+  animation: models-spin 0.9s linear infinite;
+}
+
+@keyframes models-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

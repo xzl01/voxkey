@@ -1,0 +1,62 @@
+{
+  "trigger": {
+    "enabled": false,
+    "backend": "carbon",
+    "code": null,
+    "name": "right_option",
+    "mode": "hold"
+  },
+  "recordings_dir": "~/Library/Caches/dev.xzl01.voxkey/recordings",
+  "asr_project_dir": "qwen-asr",
+  "model_dir": "models",
+  "python_venv": "back-end/platforms/macos/.venv",
+  "language": "auto",
+  "min_record_seconds": 0.3,
+  "capture": {
+    "rate": 16000,
+    "channels": 1,
+    "format": "s16",
+    "device": "default",
+    "vad": true,
+    "vad_threshold": 0.5
+  },
+  "type_command": "osascript",
+  "copy_to_clipboard": true,
+  "type_text": true,
+  "notify": true,
+  "notify_timeout_ms": 3000,
+  "strip_trailing_punctuation": false,
+
+  "engines": {
+    "funasr_coreml": {
+      "enabled": true,
+      "model_path": "models/funasr_coreml",
+      "compute_units": "ane",
+      "quantization": "int8",
+      "timeout_s": 8.0
+    },
+    "qwen3_gpu": {
+      "enabled": true,
+      "model_dir": "models/qwen3_asr",
+      "onnx_provider": "CPU",
+      "llm_use_gpu": true,
+      "encoder_frontend_fn": "qwen3_asr_encoder_frontend.int4.onnx",
+      "encoder_backend_fn": "qwen3_asr_encoder_backend.int4.onnx",
+      "llm_fn": "qwen3_asr_llm.q4_k.gguf",
+      "enable_aligner": false,
+      "timeout_s": 20.0
+    }
+  },
+
+  "fusion": {
+    "mode": "fast_first",
+    "funasr_priority_until_s": 1.2,
+    "min_agreement_chars": 4
+  },
+
+  "asr_backend": "dual",
+  "asr_service_url": "http://127.0.0.1:17863",
+  "asr_fallback_local": true,
+  "asr_http_timeout": 30,
+  "selected_runtime_id": "npu-coreml"
+}

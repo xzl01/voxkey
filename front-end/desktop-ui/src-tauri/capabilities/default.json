@@ -3,5 +3,13 @@
   "identifier": "default",
   "description": "Default desktop UI capability set.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": [
+    "core:default",
+    "allow-list_runtime_candidates",
+    "allow-load_settings",
+    "allow-save_selected_runtime",
+    "allow-save_asr_settings",
+    "allow-get_asr_service_status",
+    "allow-model_status"
+  ]
 }

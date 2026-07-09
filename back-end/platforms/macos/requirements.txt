@@ -1,0 +1,37 @@
+# SPDX-FileCopyrightText: 2026 HarryLoong
+# SPDX-License-Identifier: MIT
+#
+# macOS ASR service dependencies.
+#
+# Two compute paths:
+#   * FunASR  -> Core ML on the Apple Neural Engine (NCE / ANE)   [coremltools]
+#   * Qwen3-ASR -> llama.cpp Metal backend on the GPU            [qwen_asr_gguf]
+#
+# Install into a venv:
+#   python3.12 -m venv .venv && . .venv/bin/activate
+#   pip install -r back-end/platforms/macos/requirements.txt
+
+# --- shared ---------------------------------------------------------------
+numpy>=1.26
+scipy>=1.11
+soundfile>=0.12          # writes 16k mono wav for the LLM backend
+# Core ML conversion + quantization (FunASR NCE path)
+coremltools>=8.0
+# Qwen3-ASR GPU backend (llama.cpp Metal); packaged by the qwen-asr project.
+# If unavailable on PyPI, install from the project subtree under asr_project_dir.
+qwen-asr-gguf>=0.1; python_version >= "3.10"
+
+# --- service / util -------------------------------------------------------
+fastapi>=0.110
+uvicorn[standard]>=0.29  # ASGI server for /transcribe and /transcribe/stream
+websockets>=12           # used by uvicorn ws transport if needed
+pydantic>=2.6
+python-multipart>=0.0.9
+
+# --- diagnostics ----------------------------------------------------------
+psutil>=5.9              # memory / process accounting for benchmarks
+
+# --- optional: convert funasr models to Core ML ---------------------------
+# onnx is needed only by the conversion script (convert_funasr_coreml.py).
+onnx>=1.16
+onnxruntime>=1.18

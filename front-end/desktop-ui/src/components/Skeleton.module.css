@@ -1,0 +1,25 @@
+.skeleton {
+  display: block;
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface-2) 25%,
+    var(--border-default) 37%,
+    var(--bg-surface-2) 63%
+  );
+  background-size: 400% 100%;
+  border-radius: var(--radius-sm);
+  animation: skeleton-shimmer 1.3s ease infinite;
+}
+
+.circle {
+  border-radius: 50%;
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0 0;
+  }
+}

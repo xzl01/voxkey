@@ -19,6 +19,15 @@ Qwen3-ASR-*-gguf.zip
 
 # Native build output
 /fcitx-addon/build/
+/back-end/platforms/macos/capture_helper
+/back-end/platforms/macos/hotkey_helper
+*.mlpackage
+
+# Vendored external ASR project (cloned from HaujetZhao/Qwen3-ASR-GGUF)
+/back-end/platforms/macos/qwen-asr/
+
+# Python virtualenv for the macOS ASR service
+/back-end/platforms/macos/.venv/
 /target/
 CMakeFiles/
 CMakeCache.txt
@@ -38,3 +47,11 @@ front-end/*/src-tauri/gen/
 /.agents/
 /.codex/
 .DS_Store
+
+# Agent/runtime scratch data (planning notes, IDE caches)
+.agent/
+.codebuddy/
+
+# macOS ASR model weights and runtime artifacts (distributed out-of-band)
+back-end/platforms/macos/models/
+back-end/platforms/macos/test/data/

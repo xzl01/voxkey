@@ -1,0 +1,14 @@
+# VoxKey macOS native dependencies.
+# Apple Silicon (M-series) only: NCE/ANE requires Core ML, GPU path requires Metal.
+# Install with: brew bundle --file=back-end/platforms/macos/Brewfile
+
+# Core system audio / media frameworks come with macOS; we only need FFmpeg for
+# decoding arbitrary input formats (mp3/m4a...) into raw PCM before resampling.
+tap "homebrew/bundle"
+
+brew "ffmpeg"          # decode + resample arbitrary audio to 16k mono s16le
+brew "python@3.12"     # managed interpreter for the ASR service (avoid system python)
+brew "portaudio"       # optional: fallback raw capture if AVAudioEngine helper unavailable
+brew "rust"            # for building the Tauri desktop UI / voxkey-core
+
+# Core ML toolchain is installed via pip (coremltools / mlx) — see requirements.txt

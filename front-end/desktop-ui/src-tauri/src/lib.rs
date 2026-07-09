@@ -1,5 +1,6 @@
 use serde::Serialize;
 use std::{
+    collections::HashMap,
     fs,
     io::{Read, Write},
     net::{SocketAddr, TcpStream},
@@ -18,6 +19,18 @@ struct AsrServiceStatus {
     url: String,
     status: String,
     detail: String,
+}
+
+#[derive(Debug, Serialize)]
+struct EngineInfo {
+    id: String,
+    label: String,
+    compute: String,
+    present: bool,
+    enabled: bool,
+    loaded: bool,
+    path: Option<String>,
+    size_bytes: Option<u64>,
 }
 
 #[tauri::command]
@@ -62,6 +75,8 @@ fn save_asr_settings(
     service_url: String,
     fallback_local: bool,
     http_timeout: u64,
+    api_key: String,
+    remote_model: String,
 ) -> Result<voxkey_core::DesktopSettings, String> {
     let backend = backend.trim().to_lowercase();
     if backend != "local" && backend != "http" {
@@ -84,6 +99,12 @@ fn save_asr_settings(
     settings.asr_service_url = service_url.trim().to_string();
     settings.asr_fallback_local = fallback_local;
     settings.asr_http_timeout = http_timeout;
+    settings.asr_api_key = api_key;
+    settings.asr_remote_model = if remote_model.trim().is_empty() {
+        "whisper-1".into()
+    } else {
+        remote_model.trim().to_string()
+    };
     save_settings_file(&app, &settings)?;
     Ok(settings)
 }
@@ -92,6 +113,100 @@ fn save_asr_settings(
 fn get_asr_service_status(app: tauri::AppHandle) -> Result<AsrServiceStatus, String> {
     let settings = load_settings(app)?;
     Ok(probe_asr_service(settings.asr_service_url))
+}
+
+/// Offline snapshot of local ASR model files. Used by the Models page when the
+/// local ASR service is not running (the live status comes from GET /engines).
+#[tauri::command]
+fn model_status(app: tauri::AppHandle) -> Vec<EngineInfo> {
+    let base = resolve_macos_base(&app);
+    let enabled = read_engine_enabled(&base);
+
+    let specs: [(&str, &str, &str, &str); 2] = [
+        (
+            "funasr_coreml",
+            "FunASR CoreML",
+            "npu",
+            "models/funasr_coreml/model.onnx",
+        ),
+        (
+            "qwen3_gpu",
+            "Qwen3-ASR GPU",
+            "gpu",
+            "models/qwen3_asr/qwen3_asr_llm.q4_k.gguf",
+        ),
+    ];
+
+    specs
+        .iter()
+        .map(|(id, label, compute, rel)| {
+            let model_path = base.as_ref().map(|b| b.join(rel));
+            let present = model_path.as_ref().map(|p| p.exists()).unwrap_or(false);
+            let size = model_path
+                .as_ref()
+                .and_then(|p| std::fs::metadata(p).ok().map(|m| m.len()));
+            EngineInfo {
+                id: id.to_string(),
+                label: label.to_string(),
+                compute: compute.to_string(),
+                present,
+                enabled: *enabled.get(*id).unwrap_or(&true),
+                loaded: false,
+                path: model_path.map(|p| p.to_string_lossy().into_owned()),
+                size_bytes: size,
+            }
+        })
+        .collect()
+}
+
+/// Locate the macOS platform directory that holds `config.json` and `models/`.
+fn resolve_macos_base(app: &tauri::AppHandle) -> Option<PathBuf> {
+    // 1. Same env var the Python service reads for its config file.
+    if let Ok(cfg) = std::env::var("VOXKEY_MACOS_CONFIG") {
+        if let Some(parent) = PathBuf::from(cfg).parent() {
+            return Some(parent.to_path_buf());
+        }
+    }
+    // 2. Explicit models directory (its parent holds config.json).
+    if let Ok(dir) = std::env::var("VOXKEY_MODELS_DIR") {
+        let models = PathBuf::from(dir);
+        if let Some(parent) = models.parent() {
+            return Some(parent.to_path_buf());
+        }
+        return Some(models);
+    }
+    // 3. Best-effort: walk up from the executable looking for the repo layout.
+    if let Ok(exe) = std::env::current_exe() {
+        let mut dir = exe.parent().map(|p| p.to_path_buf());
+        while let Some(candidate) = dir {
+            let probe = candidate.join("back-end/platforms/macos/config.json");
+            if probe.exists() {
+                return Some(candidate.join("back-end/platforms/macos"));
+            }
+            dir = candidate.parent().map(|p| p.to_path_buf());
+        }
+    }
+    let _ = app;
+    None
+}
+
+fn read_engine_enabled(base: &Option<PathBuf>) -> HashMap<String, bool> {
+    let mut map = HashMap::new();
+    if let Some(base) = base {
+        let cfg = base.join("config.json");
+        if let Ok(raw) = std::fs::read_to_string(&cfg) {
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&raw) {
+                if let Some(engines) = value.get("engines").and_then(|e| e.as_object()) {
+                    for (key, val) in engines {
+                        if let Some(enabled) = val.get("enabled").and_then(|e| e.as_bool()) {
+                            map.insert(key.clone(), enabled);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    map
 }
 
 fn settings_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -201,13 +316,14 @@ fn probe_asr_service(url: String) -> AsrServiceStatus {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![
-            list_runtime_candidates,
-            load_settings,
-            save_selected_runtime,
-            save_asr_settings,
-            get_asr_service_status
-        ])
+        .invoke_handler(    tauri::generate_handler![
+        list_runtime_candidates,
+        load_settings,
+        save_selected_runtime,
+        save_asr_settings,
+        get_asr_service_status,
+        model_status
+    ])
         .run(tauri::generate_context!())
         .expect("failed to run VoxKey desktop shell");
 }

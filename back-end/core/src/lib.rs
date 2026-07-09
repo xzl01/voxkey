@@ -57,6 +57,11 @@ pub struct DesktopSettings {
     /// Request timeout (seconds) for the `http` backend. Mirrors the daemon
     /// `asr_http_timeout` setting.
     pub asr_http_timeout: u64,
+    /// Remote Whisper-compatible API key. Stored in plaintext in settings.json —
+    /// a known limitation; migrate to the system keychain before shipping.
+    pub asr_api_key: String,
+    /// Remote model name passed to the Whisper-compatible endpoint (e.g. "whisper-1").
+    pub asr_remote_model: String,
 }
 
 impl Default for DesktopSettings {
@@ -67,6 +72,8 @@ impl Default for DesktopSettings {
             asr_service_url: "http://127.0.0.1:17863".into(),
             asr_fallback_local: true,
             asr_http_timeout: 30,
+            asr_api_key: String::new(),
+            asr_remote_model: "whisper-1".into(),
         }
     }
 }
