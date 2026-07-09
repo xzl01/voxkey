@@ -9,7 +9,7 @@ use std::{
 use tauri::Manager;
 
 const SETTINGS_FILE: &str = "settings.json";
-const ASR_HEALTH_ADDR: ([u8; 4], u16) = ([127, 0, 0, 1], 17863);
+const DEFAULT_ASR_PORT: u16 = 17863;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -56,6 +56,39 @@ fn save_selected_runtime(
 }
 
 #[tauri::command]
+fn save_asr_settings(
+    app: tauri::AppHandle,
+    backend: String,
+    service_url: String,
+    fallback_local: bool,
+    http_timeout: u64,
+) -> Result<voxkey_core::DesktopSettings, String> {
+    let backend = backend.trim().to_lowercase();
+    if backend != "local" && backend != "http" {
+        return Err(format!(
+            "asr_backend must be 'local' or 'http', got {backend}"
+        ));
+    }
+    if backend == "http" {
+        let lower = service_url.to_lowercase();
+        if !lower.starts_with("http://") && !lower.starts_with("https://") {
+            return Err("asr_service_url must be an http(s) URL when asr_backend is 'http'".into());
+        }
+        if http_timeout == 0 {
+            return Err("asr_http_timeout must be > 0".into());
+        }
+    }
+
+    let mut settings = load_settings(app.clone())?;
+    settings.asr_backend = backend;
+    settings.asr_service_url = service_url.trim().to_string();
+    settings.asr_fallback_local = fallback_local;
+    settings.asr_http_timeout = http_timeout;
+    save_settings_file(&app, &settings)?;
+    Ok(settings)
+}
+
+#[tauri::command]
 fn get_asr_service_status(app: tauri::AppHandle) -> Result<AsrServiceStatus, String> {
     let settings = load_settings(app)?;
     Ok(probe_asr_service(settings.asr_service_url))
@@ -84,8 +117,34 @@ fn save_settings_file(
         .map_err(|err| format!("failed to write {}: {err}", path.display()))
 }
 
+fn parse_asr_url(url: &str) -> (String, u16, String) {
+    let without_scheme = match url.split_once("://") {
+        Some((_, rest)) => rest,
+        None => url,
+    };
+    let authority_path = without_scheme
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(without_scheme);
+    let (authority, path) = match authority_path.split_once('/') {
+        Some((a, p)) => (a, format!("/{p}")),
+        None => (authority_path, "/".to_string()),
+    };
+    let (host, port) = match authority.rsplit_once(':') {
+        Some((h, p)) => match p.parse::<u16>() {
+            Ok(port) => (h.to_string(), port),
+            Err(_) => (authority.to_string(), DEFAULT_ASR_PORT),
+        },
+        None => (authority.to_string(), DEFAULT_ASR_PORT),
+    };
+    (host, port, path)
+}
+
 fn probe_asr_service(url: String) -> AsrServiceStatus {
-    let addr = SocketAddr::from(ASR_HEALTH_ADDR);
+    let (host, port, _path) = parse_asr_url(&url);
+    let addr: SocketAddr = format!("{host}:{port}")
+        .parse()
+        .unwrap_or_else(|_| SocketAddr::from(([127, 0, 0, 1], DEFAULT_ASR_PORT)));
     let timeout = Duration::from_millis(600);
 
     let mut stream = match TcpStream::connect_timeout(&addr, timeout) {
@@ -103,7 +162,8 @@ fn probe_asr_service(url: String) -> AsrServiceStatus {
     let _ = stream.set_read_timeout(Some(timeout));
     let _ = stream.set_write_timeout(Some(timeout));
 
-    let request = b"GET /health HTTP/1.1\r\nHost: 127.0.0.1:17863\r\nConnection: close\r\n\r\n";
+    let request =
+        format!("GET /health HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n");
     if let Err(err) = stream.write_all(request) {
         return AsrServiceStatus {
             reachable: false,
@@ -145,6 +205,7 @@ pub fn run() {
             list_runtime_candidates,
             load_settings,
             save_selected_runtime,
+            save_asr_settings,
             get_asr_service_status
         ])
         .run(tauri::generate_context!())

@@ -4,8 +4,7 @@
 # Local runtime configuration
 /config.json
 
-# Runtime audio and caches
-/recordings/
+# Runtime audio and caches (recordings live under $XDG_DATA_HOME, not in repo)
 /__pycache__/
 **/__pycache__/
 *.py[cod]

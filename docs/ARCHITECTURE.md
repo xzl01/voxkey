@@ -52,11 +52,19 @@ machine has a compatible runtime.
 
 ## Current Scaffold
 
-- `apps/desktop-ui`: cross-platform Tauri shell.
+- `apps/desktop-ui`: cross-platform Tauri shell; writes user selections
+  (ASR backend, service URL, fallback, timeout, compute runtime) into Tauri's
+  `settings.json`.
 - `crates/voxkey-core`: shared Rust types and runtime candidate detection.
-- `services/asr-service`: local service boundary for ASR backends.
-- `voice_input_daemon.py`: existing Linux prototype, kept intact while the new
-  architecture is introduced.
+- `services/asr-service`: local service boundary for ASR backends. The
+  `/transcribe` endpoint is a placeholder (returns 501) until the Qwen3-ASR
+  backend is wired in.
+- `voice_input_daemon.py`: existing Linux prototype. On startup it reads
+  `config.json` and then overlays the desktop UI's Tauri `settings.json`
+  (`apply_ui_settings`), so the GUI is the single source of truth for ASR
+  backend and compute runtime on the same machine. `selected_runtime_id`
+  drives the local engine's ONNX provider / GPU path. Override the Tauri
+  settings location with `ui_settings_path` in `config.json`.
 
 ## Near-Term Milestones
 

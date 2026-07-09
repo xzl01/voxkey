@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    name: Python lint & tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: python3 -m pip install --upgrade ruff
+
+      - name: Lint Python (errors & undefined names)
+        run: ruff check .
+
+      - name: Run Python unit tests
+        run: python3 -m unittest discover -s tests -v
+
+  rust-core:
+    name: Rust shared core
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Check formatting (workspace)
+        run: cargo fmt --all -- --check
+
+      - name: Check & test voxkey-core
+        run: cargo test -p voxkey-core
+
+  rust-desktop:
+    name: Rust desktop (Tauri) build check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Tauri Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Check voxkey-desktop compiles
+        run: cargo check -p voxkey-desktop

@@ -255,6 +255,86 @@ button {
   font-size: 13px;
 }
 
+.backend-panel {
+  margin-top: 20px;
+}
+
+.backend-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.backend-option {
+  border: 1px solid #d9e2dc;
+  border-radius: 8px;
+  background: #fbfdfb;
+  color: #1b2921;
+  padding: 14px;
+  min-height: 76px;
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  gap: 12px;
+  align-items: center;
+  text-align: left;
+  cursor: pointer;
+}
+
+.backend-option.selected {
+  border-color: #3d8d4e;
+  background: #eef8ef;
+}
+
+.backend-option strong,
+.backend-option small {
+  display: block;
+}
+
+.backend-option small {
+  color: #5c6a62;
+  margin-top: 4px;
+}
+
+.backend-fields {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: #3a4a40;
+}
+
+.field-input,
+.field input[type="text"],
+.field input[type="number"] {
+  border: 1px solid #cdd6d0;
+  border-radius: 7px;
+  padding: 9px 10px;
+  font: inherit;
+  background: #fff;
+  color: #17211c;
+}
+
+.field-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.field-inline input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+}
+
+.field-inline span {
+  font-size: 13px;
+  color: #3a4a40;
+}
+
 .service-strip {
   margin-top: 20px;
   border: 1px solid #d8dfda;

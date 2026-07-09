@@ -28,7 +28,10 @@ type RuntimeCandidate = {
 
 type DesktopSettings = {
   selected_runtime_id: string | null;
+  asr_backend: string;
   asr_service_url: string;
+  asr_fallback_local: boolean;
+  asr_http_timeout: number;
 };
 
 type AsrServiceStatus = {
@@ -57,6 +60,8 @@ const computeIcon = {
   npu: MonitorCog,
 } satisfies Record<ComputeClass, typeof Cpu>;
 
+const DEFAULT_ASR_SERVICE_URL = "http://127.0.0.1:17863";
+
 export function App() {
   const [candidates, setCandidates] = useState<RuntimeCandidate[]>(fallbackCandidates);
   const [selected, setSelected] = useState("cpu-onnx-llamacpp");
@@ -64,6 +69,15 @@ export function App() {
   const [serviceStatus, setServiceStatus] = useState<AsrServiceStatus | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [statusState, setStatusState] = useState<"loading" | "idle" | "error">("loading");
+  const [serviceUrl, setServiceUrl] = useState(DEFAULT_ASR_SERVICE_URL);
+  const [backend, setBackend] = useState<"local" | "http">("local");
+  const [fallbackLocal, setFallbackLocal] = useState(true);
+  const [httpTimeout, setHttpTimeout] = useState(30);
+  const [savedBackend, setSavedBackend] = useState<"local" | "http">("local");
+  const [savedServiceUrl, setSavedServiceUrl] = useState(DEFAULT_ASR_SERVICE_URL);
+  const [savedFallbackLocal, setSavedFallbackLocal] = useState(true);
+  const [savedHttpTimeout, setSavedHttpTimeout] = useState(30);
+  const [backendSaveState, setBackendSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   useEffect(() => {
     Promise.all([invoke<RuntimeCandidate[]>("list_runtime_candidates"), invoke<DesktopSettings>("load_settings")])
@@ -73,8 +87,17 @@ export function App() {
           ? nextCandidates.find((item) => item.id === settings.selected_runtime_id)
           : undefined;
 
+        const loadedBackend = settings.asr_backend === "http" ? "http" : "local";
         setCandidates(nextCandidates);
         setSavedRuntimeId(settings.selected_runtime_id);
+        setServiceUrl(settings.asr_service_url || DEFAULT_ASR_SERVICE_URL);
+        setBackend(loadedBackend);
+        setFallbackLocal(settings.asr_fallback_local);
+        setHttpTimeout(settings.asr_http_timeout ?? 30);
+        setSavedBackend(loadedBackend);
+        setSavedServiceUrl(settings.asr_service_url || DEFAULT_ASR_SERVICE_URL);
+        setSavedFallbackLocal(settings.asr_fallback_local);
+        setSavedHttpTimeout(settings.asr_http_timeout ?? 30);
         setSelected(savedCandidate?.id ?? nextCandidates.find((item) => item.recommended)?.id ?? nextCandidates[0].id);
       })
       .catch(() => {
@@ -92,7 +115,7 @@ export function App() {
       .catch((error) => {
         setServiceStatus({
           reachable: false,
-          url: "http://127.0.0.1:17863/health",
+          url: serviceUrl,
           status: "error",
           detail: String(error),
         });
@@ -115,7 +138,6 @@ export function App() {
     }
     setSaveState("saving");
     invoke<DesktopSettings>("save_selected_runtime", {
-      runtimeId: selectedCandidate.id,
       runtime_id: selectedCandidate.id,
     })
       .then((settings) => {
@@ -130,6 +152,33 @@ export function App() {
   const hasUnsavedSelection = selectedCandidate?.id !== savedRuntimeId;
   const serviceTone = serviceStatus?.reachable ? "online" : "offline";
   const ServiceIcon = serviceStatus?.reachable ? CheckCircle2 : AlertCircle;
+
+  const hasUnsavedBackend =
+    backend !== savedBackend ||
+    serviceUrl !== savedServiceUrl ||
+    fallbackLocal !== savedFallbackLocal ||
+    httpTimeout !== savedHttpTimeout;
+
+  const saveBackend = useCallback(() => {
+    setBackendSaveState("saving");
+    invoke<DesktopSettings>("save_asr_settings", {
+      backend,
+      serviceUrl,
+      fallbackLocal,
+      httpTimeout,
+    })
+      .then((settings) => {
+        const loadedBackend = settings.asr_backend === "http" ? "http" : "local";
+        setSavedBackend(loadedBackend);
+        setSavedServiceUrl(settings.asr_service_url);
+        setSavedFallbackLocal(settings.asr_fallback_local);
+        setSavedHttpTimeout(settings.asr_http_timeout);
+        setBackendSaveState("saved");
+      })
+      .catch(() => {
+        setBackendSaveState("error");
+      });
+  }, [backend, serviceUrl, fallbackLocal, httpTimeout]);
 
   return (
     <main className="app-shell">
@@ -246,10 +295,109 @@ export function App() {
           </div>
         </section>
 
+        <section className="panel backend-panel" aria-label="ASR backend selection">
+          <div className="panel-header">
+            <h2>ASR Backend</h2>
+            <span>{backend === "http" ? "HTTP service" : "Local engine"}</span>
+          </div>
+
+          <div className="backend-toggle" role="radiogroup" aria-label="ASR backend">
+            <button
+              className={`backend-option ${backend === "local" ? "selected" : ""}`}
+              type="button"
+              role="radio"
+              aria-checked={backend === "local"}
+              onClick={() => {
+                setBackend("local");
+                setBackendSaveState("idle");
+              }}
+            >
+              <Cpu size={20} />
+              <span>
+                <strong>Local engine</strong>
+                <small>Bundled Qwen3-ASR on this machine</small>
+              </span>
+            </button>
+            <button
+              className={`backend-option ${backend === "http" ? "selected" : ""}`}
+              type="button"
+              role="radio"
+              aria-checked={backend === "http"}
+              onClick={() => {
+                setBackend("http");
+                setBackendSaveState("idle");
+              }}
+            >
+              <RadioTower size={20} />
+              <span>
+                <strong>HTTP service</strong>
+                <small>Call an external ASR service</small>
+              </span>
+            </button>
+          </div>
+
+          {backend === "http" ? (
+            <div className="backend-fields">
+              <label className="field">
+                <span>Service URL (base)</span>
+                <input
+                  type="text"
+                  value={serviceUrl}
+                  placeholder="http://127.0.0.1:17863"
+                  onChange={(event) => {
+                    setServiceUrl(event.target.value);
+                    setBackendSaveState("idle");
+                  }}
+                />
+              </label>
+              <label className="field field-inline">
+                <input
+                  type="checkbox"
+                  checked={fallbackLocal}
+                  onChange={(event) => {
+                    setFallbackLocal(event.target.checked);
+                    setBackendSaveState("idle");
+                  }}
+                />
+                <span>Fallback to local engine on failure</span>
+              </label>
+              <label className="field field-inline">
+                <span>Timeout (s)</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={httpTimeout}
+                  onChange={(event) => {
+                    setHttpTimeout(Number(event.target.value) || 0);
+                    setBackendSaveState("idle");
+                  }}
+                />
+              </label>
+            </div>
+          ) : null}
+
+          <button
+            className="primary-action"
+            type="button"
+            disabled={!hasUnsavedBackend || backendSaveState === "saving"}
+            onClick={saveBackend}
+          >
+            <Save size={16} />
+            {backendSaveState === "saving"
+              ? "Saving"
+              : hasUnsavedBackend
+                ? "Save Backend"
+                : "Saved"}
+          </button>
+          {backendSaveState === "error" ? (
+            <p className="inline-error">Could not save backend settings.</p>
+          ) : null}
+        </section>
+
         <section className="service-strip" aria-label="ASR service status">
           <div>
             <h2>ASR Service</h2>
-            <p>{serviceStatus?.url ?? "http://127.0.0.1:17863/health"}</p>
+            <p>{serviceStatus?.url ?? serviceUrl}</p>
           </div>
           <div className="service-state">
             <span className={`service-dot ${serviceTone}`} />

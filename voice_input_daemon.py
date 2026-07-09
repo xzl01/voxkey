@@ -21,7 +21,9 @@ from __future__ import annotations
 import argparse
 import dataclasses
 import json
+import logging
 import os
+import queue
 import re
 import select
 import signal
@@ -30,7 +32,9 @@ import struct
 import subprocess
 import sys
 import tempfile
+import threading
 import time
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -74,6 +78,16 @@ class Config:
     fcitx_commit: bool = True
     fcitx_socket: Optional[str] = None
     fcitx_commit_timeout_ms: int = 500
+    asr_backend: str = "local"
+    asr_service_url: str = "http://127.0.0.1:17863"
+    asr_fallback_local: bool = True
+    asr_http_timeout: int = 30
+    # UI bridge: the desktop UI writes its selections into Tauri's settings.json.
+    # `selected_runtime_id` is consumed by QwenAsr to pick the ONNX provider / GPU
+    # path; `ui_settings_path` optionally points at that file to override the
+    # platform-default location.
+    selected_runtime_id: Optional[str] = None
+    ui_settings_path: Optional[str] = None
 
 
 def expand_path(value: Any, base_dir: Path) -> Any:
@@ -107,6 +121,55 @@ def load_trigger_config(raw: dict[str, Any], base_dir: Path) -> TriggerConfig:
     return TriggerConfig(**{key: value for key, value in trigger_raw.items() if key in allowed})
 
 
+def default_ui_settings_path() -> Optional[Path]:
+    """Platform-default location of the desktop UI's Tauri settings.json."""
+    identifier = "dev.xzl01.voxkey"
+    if sys.platform.startswith("linux"):
+        base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+        return Path(base) / identifier / "settings.json"
+    if sys.platform == "darwin":
+        return Path(os.path.expanduser("~/Library/Application Support")) / identifier / "settings.json"
+    if sys.platform.startswith("win"):
+        base = os.environ.get("APPDATA") or os.path.expanduser("~\\AppData\\Roaming")
+        return Path(base) / identifier / "settings.json"
+    return None
+
+
+def apply_ui_settings(raw: dict[str, Any]) -> dict[str, Any]:
+    """Overlay the desktop UI's Tauri settings onto the daemon config.
+
+    The desktop UI is the user-facing place to pick the ASR backend and compute
+    runtime, but it persists into Tauri's ``settings.json`` while the daemon reads
+    ``config.json``. When both run on the same machine, the UI selection must win
+    so the GUI is the single source of truth.
+    """
+    explicit = raw.get("ui_settings_path")
+    path = Path(expand_path(explicit, Path.cwd())) if explicit else default_ui_settings_path()
+    if path is None or not path.is_file():
+        return raw
+    try:
+        ui = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        log(f"UI settings at {path} unreadable ({exc}); using config.json only")
+        return raw
+
+    mapping = {
+        "asrBackend": "asr_backend",
+        "asrServiceUrl": "asr_service_url",
+        "asrFallbackLocal": "asr_fallback_local",
+        "asrHttpTimeout": "asr_http_timeout",
+        "selectedRuntimeId": "selected_runtime_id",
+    }
+    overridden = []
+    for ui_key, cfg_key in mapping.items():
+        if ui.get(ui_key) is not None:
+            raw[cfg_key] = ui[ui_key]
+            overridden.append(cfg_key)
+    if overridden:
+        log(f"Applied UI settings from {path}: {', '.join(overridden)}")
+    return raw
+
+
 def load_config(path: Path) -> Config:
     path = path.expanduser()
     if not path.is_absolute():
@@ -127,13 +190,54 @@ def load_config(path: Path) -> Config:
         raw[key] = expand_path(raw[key], base_dir)
 
     raw["trigger"] = load_trigger_config(raw, base_dir)
+    raw = apply_ui_settings(raw)
     allowed = {field.name for field in dataclasses.fields(Config)}
-    return Config(**{key: value for key, value in raw.items() if key in allowed})
+    cfg = Config(**{key: value for key, value in raw.items() if key in allowed})
+    validate_config(cfg)
+    return cfg
+
+
+def validate_config(cfg: Config) -> None:
+    if cfg.min_record_seconds < 0:
+        raise ValueError("min_record_seconds must be >= 0")
+    pr = cfg.pw_record
+    if not isinstance(pr, dict):
+        raise ValueError("pw_record must be an object")
+    rate = pr.get("rate", 16000)
+    channels = pr.get("channels", 1)
+    if not isinstance(rate, int) or rate <= 0:
+        raise ValueError("pw_record.rate must be a positive integer")
+    if not isinstance(channels, int) or channels <= 0:
+        raise ValueError("pw_record.channels must be a positive integer")
+    if cfg.notify_timeout_ms < 0:
+        raise ValueError("notify_timeout_ms must be >= 0")
+    if cfg.fcitx_commit_timeout_ms <= 0:
+        raise ValueError("fcitx_commit_timeout_ms must be > 0")
+    mode = (cfg.trigger.mode or "").lower().strip()
+    if mode and mode not in {"hold", "toggle"}:
+        raise ValueError(f"trigger.mode must be 'hold' or 'toggle', got {cfg.trigger.mode!r}")
+    backend = (cfg.asr_backend or "local").lower().strip()
+    if backend not in {"local", "http"}:
+        raise ValueError(f"asr_backend must be 'local' or 'http', got {cfg.asr_backend!r}")
+    if backend == "http":
+        url = (cfg.asr_service_url or "").lower()
+        if not url.startswith(("http://", "https://")):
+            raise ValueError("asr_service_url must be an http(s) URL when asr_backend is 'http'")
+        if cfg.asr_http_timeout <= 0:
+            raise ValueError("asr_http_timeout must be > 0")
+
+
+_logger = logging.getLogger("voxkey")
+if not _logger.handlers:
+    _handler = logging.StreamHandler(sys.stderr)
+    _handler.setFormatter(logging.Formatter("[%(asctime)s] %(message)s", "%Y-%m-%d %H:%M:%S"))
+    _logger.addHandler(_handler)
+    _logger.setLevel(logging.INFO)
+    _logger.propagate = False
 
 
 def log(message: str) -> None:
-    stamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{stamp}] {message}", flush=True)
+    _logger.info(message)
 
 
 def run_checked(args: list[str], *, input_text: str | None = None, timeout: float = 10) -> subprocess.CompletedProcess:
@@ -357,36 +461,98 @@ def notify(cfg: Config, title: str, body: str = "") -> None:
         log(f"notify-send failed: {result.stderr.strip()}")
 
 
+_RUNTIME_ENGINE: dict[str, tuple[str, bool]] = {
+    "cpu-onnx-llamacpp": ("CPU", False),
+    "gpu-vulkan": ("CPU", True),
+    "gpu-metal": ("CPU", True),
+    "gpu-directml": ("Dml", True),
+    "npu-openvino-linux": ("OpenVINO", True),
+    "npu-openvino-qnn": ("OpenVINO", True),
+    "npu-coreml": ("CPU", True),
+}
+
+
+def engine_settings_for_runtime(runtime_id: Optional[str]) -> tuple[str, bool]:
+    """Map a UI-selected runtime candidate to Qwen3-ASR engine settings.
+
+    Returns ``(onnx_provider, llm_use_gpu)``. When nothing is selected we keep
+    the legacy default (CPU ONNX provider with GPU llama.cpp enabled) so existing
+    ``config.json`` setups behave exactly as before.
+    """
+    if runtime_id is None:
+        return ("CPU", True)
+    return _RUNTIME_ENGINE.get(runtime_id, ("CPU", True))
+
+
 class QwenAsr:
     def __init__(self, cfg: Config) -> None:
         self.cfg = cfg
-        project_dir = Path(cfg.asr_project_dir)
-        bin_dir = project_dir / "qwen_asr_gguf" / "inference" / "bin"
+        self.backend = (cfg.asr_backend or "local").lower().strip()
+        self.engine: Any = None
+        self._local_loaded = False
+        self._local_failed = False
+        if self.backend == "local":
+            self._load_local_engine()
+        elif self.backend == "http":
+            if not (cfg.asr_service_url or "").lower().startswith(("http://", "https://")):
+                raise ValueError(
+                    f"asr_backend is 'http' but asr_service_url is invalid: {cfg.asr_service_url!r}"
+                )
+        else:
+            raise ValueError(f"asr_backend must be 'local' or 'http', got {cfg.asr_backend!r}")
 
-        # Make dependent .so files discoverable before qwen_asr_gguf loads libllama.
-        os.environ.setdefault("GGML_VK_DISABLE_F16", "1")
-        old_ld = os.environ.get("LD_LIBRARY_PATH", "")
-        if str(bin_dir) not in old_ld.split(":"):
-            os.environ["LD_LIBRARY_PATH"] = f"{bin_dir}:{old_ld}" if old_ld else str(bin_dir)
+    def _load_local_engine(self) -> None:
+        if self._local_loaded or self._local_failed:
+            return
+        try:
+            project_dir = Path(self.cfg.asr_project_dir)
+            bin_dir = project_dir / "qwen_asr_gguf" / "inference" / "bin"
 
-        sys.path.insert(0, str(project_dir))
-        from qwen_asr_gguf.inference import ASREngineConfig, QwenASREngine
+            # Make dependent .so files discoverable before qwen_asr_gguf loads libllama.
+            os.environ.setdefault("GGML_VK_DISABLE_F16", "1")
+            old_ld = os.environ.get("LD_LIBRARY_PATH", "")
+            if str(bin_dir) not in old_ld.split(":"):
+                os.environ["LD_LIBRARY_PATH"] = f"{bin_dir}:{old_ld}" if old_ld else str(bin_dir)
 
-        log(f"Loading Qwen3-ASR engine: {cfg.model_dir}")
-        self.engine = QwenASREngine(
-            config=ASREngineConfig(
-                model_dir=cfg.model_dir,
-                onnx_provider="CPU",
-                llm_use_gpu=True,
-                encoder_frontend_fn="qwen3_asr_encoder_frontend.int4.onnx",
-                encoder_backend_fn="qwen3_asr_encoder_backend.int4.onnx",
-                enable_aligner=False,
-                verbose=False,
+            sys.path.insert(0, str(project_dir))
+            from qwen_asr_gguf.inference import ASREngineConfig, QwenASREngine
+
+            onnx_provider, llm_use_gpu = engine_settings_for_runtime(self.cfg.selected_runtime_id)
+            log(
+                f"Loading Qwen3-ASR engine: {self.cfg.model_dir} "
+                f"(runtime={self.cfg.selected_runtime_id or 'default'}, "
+                f"onnx_provider={onnx_provider}, llm_use_gpu={llm_use_gpu})"
             )
-        )
-        log("Qwen3-ASR engine ready")
+            self.engine = QwenASREngine(
+                config=ASREngineConfig(
+                    model_dir=self.cfg.model_dir,
+                    onnx_provider=onnx_provider,
+                    llm_use_gpu=llm_use_gpu,
+                    encoder_frontend_fn="qwen3_asr_encoder_frontend.int4.onnx",
+                    encoder_backend_fn="qwen3_asr_encoder_backend.int4.onnx",
+                    enable_aligner=False,
+                    verbose=False,
+                )
+            )
+            log("Qwen3-ASR engine ready")
+            self._local_loaded = True
+        except Exception as exc:
+            self._local_failed = True
+            raise ValueError(f"Failed to load local Qwen3-ASR engine: {exc!r}") from exc
 
     def transcribe(self, audio_path: Path) -> str:
+        if self.backend == "http":
+            try:
+                return self._transcribe_http(audio_path)
+            except Exception as exc:
+                if self.cfg.asr_fallback_local:
+                    log(f"HTTP ASR failed ({exc}); falling back to local engine")
+                    self._load_local_engine()
+                    return self._transcribe_local(audio_path)
+                raise
+        return self._transcribe_local(audio_path)
+
+    def _transcribe_local(self, audio_path: Path) -> str:
         result = self.engine.transcribe(
             audio_file=str(audio_path),
             language=self.cfg.language,
@@ -400,8 +566,26 @@ class QwenAsr:
             text = strip_punctuation(text)
         return text
 
+    def _transcribe_http(self, audio_path: Path) -> str:
+        url = self.cfg.asr_service_url.rstrip("/") + "/transcribe"
+        with audio_path.open("rb") as handle:
+            data = handle.read()
+        request = urllib.request.Request(
+            url,
+            data=data,
+            method="POST",
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        with urllib.request.urlopen(request, timeout=self.cfg.asr_http_timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        text = (payload.get("text") or "").strip()
+        if self.cfg.strip_trailing_punctuation:
+            text = strip_punctuation(text)
+        return text
+
     def shutdown(self) -> None:
-        self.engine.shutdown()
+        if self.engine is not None:
+            self.engine.shutdown()
 
 
 class Recorder:
@@ -443,7 +627,7 @@ class Recorder:
         except subprocess.TimeoutExpired:
             proc.terminate()
             _, stderr = proc.communicate(timeout=3)
-        if proc.returncode not in (0, -signal.SIGINT, 130, None):
+        if proc.returncode not in (0, -signal.SIGINT, -signal.SIGTERM, 130, 143):
             log(f"pw-record exited with {proc.returncode}: {(stderr or '').strip()}")
         if elapsed < self.cfg.min_record_seconds:
             log(f"Recording too short ({elapsed:.2f}s), ignored")
@@ -485,13 +669,17 @@ def insert_text(cfg: Config, text: str) -> None:
         log(f"Copied text: {text}")
 
 
-def iter_key_events(device: str, trigger_code: int):
+def iter_key_events(device: str, trigger_code: int, stop_event: Optional[threading.Event] = None):
     fd = os.open(device, os.O_RDONLY | os.O_NONBLOCK)
     poller = select.poll()
     poller.register(fd, select.POLLIN)
     try:
-        while True:
-            poller.poll()
+        # poll() is only a coarse 200ms wake-up so we can observe stop_event
+        # promptly; actual events are read from the non-blocking fd below.
+        while not stop_event or not stop_event.is_set():
+            poller.poll(200)
+            if stop_event and stop_event.is_set():
+                break
             try:
                 data = os.read(fd, EVENT_SIZE * 16)
             except BlockingIOError:
@@ -556,20 +744,50 @@ def transcribe_file(cfg: Config, audio: Path, *, do_type: bool) -> int:
     return 0
 
 
-def stop_transcribe_insert(recorder: Recorder, asr: QwenAsr, cfg: Config) -> None:
+class TranscribeWorker:
+    def __init__(self, asr: QwenAsr, cfg: Config) -> None:
+        self.asr = asr
+        self.cfg = cfg
+        self._queue: "queue.Queue[Optional[Path]]" = queue.Queue()
+        self._thread = threading.Thread(target=self._run, name="voxkey-transcribe", daemon=True)
+        self._thread.start()
+
+    def submit(self, audio: Path) -> None:
+        self._queue.put(audio)
+
+    def _run(self) -> None:
+        while True:
+            item = self._queue.get()
+            if item is None:
+                self._queue.task_done()
+                return
+            try:
+                self._process(item)
+            finally:
+                self._queue.task_done()
+
+    def _process(self, audio: Path) -> None:
+        try:
+            notify(self.cfg, "正在转写…")
+            text = self.asr.transcribe(audio)
+            log(f"Transcribed: {text}")
+            notify(self.cfg, "语音输入完成", text[:80] if text else "未识别到文字")
+            insert_text(self.cfg, text)
+        except Exception as exc:
+            log(f"Transcription failed: {exc!r}")
+            notify(self.cfg, "语音输入失败", repr(exc)[:120])
+
+    def stop(self) -> None:
+        self._queue.put(None)
+        self._thread.join(timeout=10)
+
+
+def _finish_recording(recorder: Recorder, worker: TranscribeWorker, cfg: Config) -> None:
     audio = recorder.stop()
     if audio is None:
         notify(cfg, "语音输入已取消", "录音太短或没有音频")
         return
-    try:
-        notify(cfg, "正在转写…")
-        text = asr.transcribe(audio)
-        log(f"Transcribed: {text}")
-        notify(cfg, "语音输入完成", text[:80] if text else "未识别到文字")
-        insert_text(cfg, text)
-    except Exception as exc:
-        log(f"Transcription failed: {exc!r}")
-        notify(cfg, "语音输入失败", repr(exc)[:120])
+    worker.submit(audio)
 
 
 def run_daemon(cfg: Config) -> int:
@@ -602,12 +820,22 @@ def run_daemon(cfg: Config) -> int:
 
     recorder = Recorder(cfg)
     asr = QwenAsr(cfg)
+    worker = TranscribeWorker(asr, cfg)
+    stop_event = threading.Event()
+
+    def _request_stop(signum: int, _frame: object) -> None:
+        log(f"Received signal {signum}; shutting down")
+        stop_event.set()
+
+    signal.signal(signal.SIGINT, _request_stop)
+    signal.signal(signal.SIGTERM, _request_stop)
+
     log(
         f"Listening for {trigger.name} code={trigger.code} "
         f"mode={trigger_mode} on {input_device}"
     )
     try:
-        for state in iter_key_events(input_device, trigger.code):
+        for state in iter_key_events(input_device, trigger.code, stop_event):
             log(f"Trigger event: {key_state_name(state)} ({state})")
             if trigger_mode == "hold":
                 if state in {KEY_PRESS, KEY_REPEAT}:
@@ -616,17 +844,19 @@ def run_daemon(cfg: Config) -> int:
                         notify(cfg, "正在录音…", "松开按键后转写")
                 elif state == KEY_RELEASE:
                     notify(cfg, "录音结束", "开始转写")
-                    stop_transcribe_insert(recorder, asr, cfg)
+                    _finish_recording(recorder, worker, cfg)
             elif trigger_mode == "toggle" and state == KEY_PRESS:
                 if recorder.proc is None:
                     recorder.start()
                     notify(cfg, "正在录音…", "再次按键后转写")
                 else:
                     notify(cfg, "录音结束", "开始转写")
-                    stop_transcribe_insert(recorder, asr, cfg)
+                    _finish_recording(recorder, worker, cfg)
     finally:
+        stop_event.set()
         if recorder.proc is not None:
             recorder.stop()
+        worker.stop()
         asr.shutdown()
     return 0
 
@@ -649,7 +879,17 @@ def main() -> int:
     if args.detect_key is not None:
         return detect_key(args.detect_key or None, timeout=args.detect_timeout)
 
-    cfg = load_config(Path(args.config))
+    try:
+        cfg = load_config(Path(args.config))
+    except (OSError, ValueError) as exc:
+        print(f"Failed to load config: {exc}", file=sys.stderr)
+        return 2
+
+    if cfg.python_venv and not sys.executable.startswith(str(cfg.python_venv)):
+        log(
+            f"WARNING: running with {sys.executable}, but config.python_venv is "
+            f"{cfg.python_venv}; model/engine dependencies for that venv may be missing."
+        )
     if args.self_test:
         return self_test(cfg)
     if args.ping_fcitx:

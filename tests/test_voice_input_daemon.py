@@ -1,12 +1,14 @@
 # SPDX-FileCopyrightText: 2026 HarryLoong
 # SPDX-License-Identifier: MIT
 
+import http.server
 import io
 import json
 import os
 import struct
 import subprocess
 import tempfile
+import threading
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -337,6 +339,66 @@ class InsertTextTests(unittest.TestCase):
 
         self.assertEqual(run_checked.call_args_list[0], mock.call(["wl-copy"], input_text="hello", timeout=2))
         self.assertEqual(run_checked.call_args_list[1], mock.call(["wtype", "hello"], timeout=15))
+
+
+class AsrBackendTests(unittest.TestCase):
+    def test_invalid_backend_is_rejected_by_validate(self):
+        with self.assertRaises(ValueError):
+            daemon.validate_config(make_config(asr_backend="bogus"))
+
+    def test_http_backend_requires_valid_url(self):
+        with self.assertRaises(ValueError):
+            daemon.validate_config(make_config(asr_backend="http", asr_service_url="not-a-url"))
+
+    def test_http_backend_accepts_only_http_scheme(self):
+        with self.assertRaises(ValueError):
+            daemon.validate_config(make_config(asr_backend="http", asr_service_url="ftp://x"))
+
+    def test_http_backend_transcribes_via_service(self):
+        received = {}
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length", "0"))
+                received["bytes"] = self.rfile.read(length)
+                body = json.dumps({"text": "hello from service"}).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        port = server.server_address[1]
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        try:
+            with tempfile.NamedTemporaryFile(suffix=".wav") as tmp:
+                tmp.write(b"RIFF....wav-data")
+                tmp.flush()
+                cfg = make_config(
+                    asr_backend="http",
+                    asr_service_url=f"http://127.0.0.1:{port}",
+                    asr_fallback_local=False,
+                )
+                asr = daemon.QwenAsr(cfg)
+                text = asr.transcribe(Path(tmp.name))
+            self.assertEqual(text, "hello from service")
+            self.assertGreater(len(received.get("bytes", b"")), 0)
+        finally:
+            server.shutdown()
+
+    def test_http_backend_without_fallback_propagates_errors(self):
+        cfg = make_config(
+            asr_backend="http",
+            asr_service_url="http://127.0.0.1:1",
+            asr_fallback_local=False,
+        )
+        asr = daemon.QwenAsr(cfg)
+        with self.assertRaises(Exception):
+            asr.transcribe(Path("/nonexistent-voxkey.wav"))
 
 
 if __name__ == "__main__":
