@@ -26,7 +26,7 @@ $HOME/AI/
 ```bash
 python3 -m venv "$HOME/qwen3-asr-venv"
 "$HOME/qwen3-asr-venv/bin/pip" install --upgrade pip
-"$HOME/qwen3-asr-venv/bin/pip" install -r "$HOME/AI/VoxKey/requirements-asr.txt"
+"$HOME/qwen3-asr-venv/bin/pip" install -r "$HOME/AI/VoxKey/back-end/asr-service/requirements.txt"
 ```
 
 如果你的仓库路径不是 `$HOME/AI/VoxKey`，把命令里的路径替换为实际位置。

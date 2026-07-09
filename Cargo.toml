@@ -1,7 +1,7 @@
 [workspace]
 members = [
-  "apps/desktop-ui/src-tauri",
-  "crates/voxkey-core",
+  "front-end/desktop-ui/src-tauri",
+  "back-end/core",
 ]
 resolver = "2"
 

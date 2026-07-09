@@ -23,4 +23,4 @@ if [[ -d "$BIN_DIR" ]]; then
   export LD_LIBRARY_PATH="$BIN_DIR:${LD_LIBRARY_PATH:-}"
 fi
 
-exec "$PYTHON_BIN" "$SCRIPT_DIR/voice_input_daemon.py" --config "$CONFIG" "$@"
+exec "$PYTHON_BIN" "$SCRIPT_DIR/../../voice-daemon/voice_input_daemon.py" --config "$CONFIG" "$@"

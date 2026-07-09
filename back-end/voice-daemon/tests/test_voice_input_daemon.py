@@ -11,10 +11,12 @@ import tempfile
 import threading
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+import sys
 from pathlib import Path
 from unittest import mock
 
-import voice_input_daemon as daemon
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import voice_input_daemon as daemon  # noqa: E402
 
 
 PROC_INPUT_DEVICES = """\

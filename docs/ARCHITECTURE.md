@@ -52,19 +52,27 @@ machine has a compatible runtime.
 
 ## Current Scaffold
 
-- `apps/desktop-ui`: cross-platform Tauri shell; writes user selections
+The repo is split into `front-end/` (user-facing app) and `back-end/`
+(services, daemons, shared libs), with OS-specific artifacts isolated under
+`*/platforms/{linux,macos,windows}`.
+
+- `front-end/desktop-ui`: cross-platform Tauri shell; writes user selections
   (ASR backend, service URL, fallback, timeout, compute runtime) into Tauri's
-  `settings.json`.
-- `crates/voxkey-core`: shared Rust types and runtime candidate detection.
-- `services/asr-service`: local service boundary for ASR backends. The
+  `settings.json`. OS-specific Tauri configs/build scripts live in
+  `front-end/desktop-ui/src-tauri/platforms/`.
+- `back-end/core`: shared Rust types and runtime candidate detection
+  (crate `voxkey-core`).
+- `back-end/asr-service`: local service boundary for ASR backends. The
   `/transcribe` endpoint is a placeholder (returns 501) until the Qwen3-ASR
   backend is wired in.
-- `voice_input_daemon.py`: existing Linux prototype. On startup it reads
-  `config.json` and then overlays the desktop UI's Tauri `settings.json`
-  (`apply_ui_settings`), so the GUI is the single source of truth for ASR
-  backend and compute runtime on the same machine. `selected_runtime_id`
-  drives the local engine's ONNX provider / GPU path. Override the Tauri
-  settings location with `ui_settings_path` in `config.json`.
+- `back-end/voice-daemon/voice_input_daemon.py`: existing Linux prototype. On
+  startup it reads `config.json` (default: `back-end/platforms/linux/`) and
+  then overlays the desktop UI's Tauri `settings.json` (`apply_ui_settings`),
+  so the GUI is the single source of truth for ASR backend and compute runtime
+  on the same machine. `selected_runtime_id` drives the local engine's ONNX
+  provider / GPU path. Override the Tauri settings location with
+  `ui_settings_path` in `config.json`. The Linux launcher, service, fcitx5
+  addon, and example config live under `back-end/platforms/linux/`.
 
 ## Near-Term Milestones
 

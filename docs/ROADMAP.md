@@ -27,9 +27,9 @@ Status: done
 Deliverables:
 
 - Rename product identity to 简听输入 / VoxKey.
-- Add the Tauri desktop shell under `apps/desktop-ui`.
-- Add the shared Rust crate under `crates/voxkey-core`.
-- Add the ASR service boundary under `services/asr-service`.
+- Add the Tauri desktop shell under `front-end/desktop-ui`.
+- Add the shared Rust crate under `back-end/core`.
+- Add the ASR service boundary under `back-end/asr-service`.
 - Keep the existing Linux daemon, fcitx5 addon, and systemd service working.
 
 Exit criteria:
@@ -63,7 +63,7 @@ Iteration 1, 2026-06-30:
 - Added Tauri commands for loading settings, saving selected runtime, and
   probing the local ASR service health endpoint.
 - Added desktop UI state for saved runtime preference and ASR service status.
-- Added `DesktopSettings` in `crates/voxkey-core` with tests for default local
+- Added `DesktopSettings` in `back-end/core` with tests for default local
   service configuration.
 
 ### Phase 2: CPU Baseline End-To-End

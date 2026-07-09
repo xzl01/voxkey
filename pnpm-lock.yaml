@@ -8,7 +8,7 @@ importers:
 
   .: {}
 
-  apps/desktop-ui:
+  front-end/desktop-ui:
     dependencies:
       '@tauri-apps/api':
         specifier: ^2.8.0

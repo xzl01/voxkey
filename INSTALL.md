@@ -25,7 +25,7 @@ sudo pacman -S --needed base-devel git
 
 ```bash
 python3 -m venv "$HOME/qwen3-asr-venv"
-"$HOME/qwen3-asr-venv/bin/pip" install -r requirements-asr.txt
+"$HOME/qwen3-asr-venv/bin/pip" install -r back-end/asr-service/requirements.txt
 
 git clone https://github.com/HaujetZhao/Qwen3-ASR-GGUF.git "$HOME/AI/Model/Qwen3-ASR-GGUF"
 ```
@@ -59,6 +59,7 @@ export GGML_VK_DISABLE_F16=1
 ## 3. 配置语音输入
 
 ```bash
+cd back-end/platforms/linux
 cp config.example.json config.json
 ```
 
@@ -130,7 +131,7 @@ Detected:
 fcitx5 addon 是推荐的上屏路径；失败时守护进程会回退到 `wtype`。
 
 ```bash
-cd fcitx-addon
+cd back-end/platforms/linux/fcitx-addon
 ./install-user.sh
 fcitx5 -rd
 cd ..
@@ -175,11 +176,11 @@ PONG
 
 ## 6. systemd user 服务
 
-本仓库提供的 service 默认安装路径是 `%h/AI/VoxKey`。如果仓库放在其他位置，先编辑 `systemd/user/voxkey.service`。
+本仓库提供的 service 默认安装路径是 `%h/AI/VoxKey/back-end/platforms/linux`。如果仓库放在其他位置，先编辑 `back-end/platforms/linux/systemd/user/voxkey.service`。
 
 ```bash
 mkdir -p "$HOME/.config/systemd/user"
-cp systemd/user/voxkey.service "$HOME/.config/systemd/user/"
+cp back-end/platforms/linux/systemd/user/voxkey.service "$HOME/.config/systemd/user/"
 systemctl --user daemon-reload
 systemctl --user enable --now voxkey.service
 ```

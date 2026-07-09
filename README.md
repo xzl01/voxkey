@@ -88,6 +88,7 @@ The usable path today is the Linux / Wayland prototype. See
 [docs/import-qwen3-asr-model.md](docs/import-qwen3-asr-model.md) for model import.
 
 ```bash
+cd back-end/platforms/linux
 cp config.example.json config.json
 ./run.sh --list-devices
 ./run.sh --detect-key
@@ -228,12 +229,13 @@ sequenceDiagram
 
 ### 1. 配置加载 / Config loading
 
-`run.sh` 会选择 Python 解释器并设置运行环境，然后执行 `voice_input_daemon.py`：
+`run.sh` 位于 `back-end/platforms/linux/`，它会选择 Python 解释器并设置运行环境，然后执行 `back-end/voice-daemon/voice_input_daemon.py`：
 
-`run.sh` selects the Python interpreter and sets up the environment, then runs
-`voice_input_daemon.py`:
+`run.sh` (under `back-end/platforms/linux/`) selects the Python interpreter and
+sets up the environment, then runs `back-end/voice-daemon/voice_input_daemon.py`:
 
 ```bash
+cd back-end/platforms/linux
 ./run.sh
 ```
 
@@ -456,7 +458,7 @@ datagram socket, receives text from the Python daemon, and commits it via the
 fcitx5 input context. The Python daemon keeps `wtype` as fallback.
 
 ```bash
-cd fcitx-addon
+cd back-end/platforms/linux/fcitx-addon
 ./install-user.sh
 fcitx5 -rd
 cd ..
@@ -491,7 +493,7 @@ $HOME/AI/
 
 ```bash
 python3 -m venv "$HOME/qwen3-asr-venv"
-"$HOME/qwen3-asr-venv/bin/pip" install -r requirements-asr.txt
+"$HOME/qwen3-asr-venv/bin/pip" install -r back-end/asr-service/requirements.txt
 git clone https://github.com/HaujetZhao/Qwen3-ASR-GGUF.git "$HOME/AI/Model/Qwen3-ASR-GGUF"
 ```
 
@@ -535,17 +537,32 @@ CI runs `cargo fmt --all -- --check`, `cargo test -p voxkey-core`, and
 
 ```text
 .
-├── apps/desktop-ui/              # Tauri desktop shell and React renderer
-├── crates/voxkey-core/           # Shared Rust core types and runtime detection
-├── services/asr-service/         # Local ASR service boundary
-├── fcitx-addon/                  # Linux fcitx5 commit path
-├── systemd/user/voxkey.service   # Linux user service example
-├── tests/                        # Python unit tests for the Linux prototype
+├── front-end/                    # 前端 / Front-end
+│   └── desktop-ui/               # Tauri desktop shell + React renderer
+│       ├── src/                  #   React / TypeScript (cross-platform)
+│       ├── src-tauri/            #   Tauri Rust shell (cross-platform core)
+│       │   └── platforms/        #     OS-specific Tauri configs / build scripts
+│       │       ├── linux/  macos/  windows/
+│       ├── index.html  vite.config.ts  tsconfig.json  package.json
+│       └── dist/                 #   build output
+├── back-end/                     # 后端 / Back-end
+│   ├── core/                     # Shared Rust lib (voxkey-core)
+│   ├── asr-service/              # Local ASR HTTP service (Python)
+│   │   ├── main.py  README.md  requirements.txt
+│   ├── voice-daemon/             # Voice input daemon (Python, Linux-oriented)
+│   │   ├── voice_input_daemon.py
+│   │   └── tests/
+│   ├── ruff.toml                 # Python lint config
+│   └── platforms/                # OS-specific backend files & deps
+│       ├── linux/                #   run.sh, config.example.json, fcitx-addon/, systemd/
+│       ├── macos/                #   (placeholder for macOS-specific)
+│       └── windows/              #   (placeholder for Windows-specific)
 ├── docs/                         # Architecture, roadmap, model import notes
-├── voice_input_daemon.py         # Current Linux / Wayland daemon
-├── run.sh                        # Linux daemon launcher
-├── config.example.json           # Safe default config
-└── INSTALL.md                    # Linux prototype install guide
+├── .github/workflows/ci.yml      # CI (cargo fmt, rust tests, ruff, python tests)
+├── Cargo.toml                    # Rust workspace (front-end + back-end members)
+├── package.json  pnpm-workspace.yaml  pnpm-lock.yaml
+├── README.md  INSTALL.md  LICENSE
+└── .gitignore
 ```
 
 This repository does not include / 本仓库不包含:
@@ -591,11 +608,21 @@ Important `config.json` fields / 重要 `config.json` 字段:
 ## Validation / 验证
 
 ```bash
+# Python backend tests
+cd back-end/voice-daemon
 python3 -m unittest discover -s tests -v
 python3 -m py_compile voice_input_daemon.py tests/test_voice_input_daemon.py
+
+# Validate example config
+cd ../platforms/linux
 python3 -m json.tool config.example.json >/dev/null
-cmake -S fcitx-addon -B fcitx-addon/build -DCMAKE_BUILD_TYPE=RelWithDebInfo
-cmake --build fcitx-addon/build
+
+# Build the Linux fcitx5 addon
+cd fcitx-addon
+cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build
+cd ../..
+
 pnpm check
 ```
 

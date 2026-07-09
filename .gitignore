@@ -32,7 +32,7 @@ Makefile
 node_modules/
 dist/
 .pnpm-store/
-apps/*/src-tauri/gen/
+front-end/*/src-tauri/gen/
 
 # Local editor/agent scratch directories
 /.agents/

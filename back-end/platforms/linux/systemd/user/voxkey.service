@@ -8,11 +8,12 @@ After=graphical-session.target pipewire.service
 [Service]
 Type=simple
 # The paths below must point at the directory that contains run.sh. This
-# matches the recommended layout in README.md ($HOME/AI/VoxKey). If you cloned
-# VoxKey elsewhere, edit both lines (or drop a drop-in under
+# matches the recommended layout in README.md ($HOME/AI/VoxKey). The launcher
+# now lives under back-end/platforms/linux/. If you cloned VoxKey elsewhere,
+# edit both lines (or drop a drop-in under
 # ~/.config/systemd/user/voxkey.service.d/ that overrides them).
-WorkingDirectory=%h/AI/VoxKey
-ExecStart=%h/AI/VoxKey/run.sh
+WorkingDirectory=%h/AI/VoxKey/back-end/platforms/linux
+ExecStart=%h/AI/VoxKey/back-end/platforms/linux/run.sh
 Restart=on-failure
 RestartSec=2
 

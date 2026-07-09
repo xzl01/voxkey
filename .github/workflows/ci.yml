@@ -20,10 +20,10 @@ jobs:
         run: python3 -m pip install --upgrade ruff
 
       - name: Lint Python (errors & undefined names)
-        run: ruff check .
+        run: ruff check back-end
 
       - name: Run Python unit tests
-        run: python3 -m unittest discover -s tests -v
+        run: python3 -m unittest discover -s back-end/voice-daemon/tests -v
 
   rust-core:
     name: Rust shared core

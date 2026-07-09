@@ -1,4 +1,4 @@
 packages:
-  - "apps/*"
+  - "front-end/*"
 allowBuilds:
   esbuild: true

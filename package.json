@@ -10,7 +10,7 @@
     "build": "pnpm --filter @voxkey/desktop-ui build",
     "desktop:build": "pnpm --filter @voxkey/desktop-ui tauri build",
     "typecheck": "pnpm --filter @voxkey/desktop-ui typecheck",
-    "service:dev": "python3 services/asr-service/main.py",
+    "service:dev": "python3 back-end/asr-service/main.py",
     "check": "pnpm typecheck && cargo check --workspace"
   }
 }
