@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -32,6 +33,20 @@ RELEASE_BASE = "https://github.com/xzl01/voxkey/releases/download/voxkey-models-
 ARCHIVE = "funasr_coreml.tar.gz"
 
 FILES = ["model.onnx", "am.mvn", "tokens.txt", "frontend.json"]
+
+# Committed SHA-256 of the release archive, verified by default on every
+# install so a tampered/mismatched asset is rejected before extraction.
+DEFAULT_MANIFEST = Path(__file__).resolve().parent / "manifests" / "funasr_coreml.json"
+
+
+def _default_sha256() -> str | None:
+    try:
+        data = json.loads(DEFAULT_MANIFEST.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    h = data.get("sha256")
+    return h if isinstance(h, str) and h else None
+
 
 
 def _mirrors(explicit: str | None) -> list[str]:
@@ -83,8 +98,8 @@ def main() -> int:
     ap.add_argument("--mirrors", default=None)
     ap.add_argument(
         "--sha256",
-        default=os.environ.get("VOXKEY_FUNASR_SHA256", ""),
-        help="expected SHA-256 of the package archive (verified before extraction)",
+        default=None,
+        help="expected SHA-256 of the package archive (overrides the committed default manifest)",
     )
     ap.add_argument(
         "--no-convert",
@@ -100,7 +115,8 @@ def main() -> int:
         return 0
 
     mirrors = _mirrors(args.mirrors)
-    sha = args.sha256 or None
+    # Explicit --sha256 > env VOXKEY_FUNASR_SHA256 > committed default manifest.
+    sha = args.sha256 or os.environ.get("VOXKEY_FUNASR_SHA256") or _default_sha256()
     if args.base_url and _download_package(out, args.base_url, mirrors, sha):
         print("Done.")
         return 0

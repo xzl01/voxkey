@@ -46,18 +46,34 @@ pip install -r "$MACOS_DIR/requirements.txt"
 # 3. FunASR -> Core ML (NCE) --------------------------------------------------
 # Prefer the pre-converted package (one download, no torch needed); fall back
 # to a local torch export if the package source is unavailable.
+MODEL_FAIL=0
 if [[ "${SKIP_FUNASR_CONVERT:-0}" != "1" ]]; then
   echo "==> Ensuring FunASR Core ML model (NCE)"
-  python "$MACOS_DIR/ensure_funasr.py" --out "$MACOS_DIR/models/funasr_coreml" || \
-    echo "!! FunASR model setup failed; run convert_funasr_coreml.py manually."
+  if ! python "$MACOS_DIR/ensure_funasr.py" --out "$MACOS_DIR/models/funasr_coreml"; then
+    if [[ "${FUNASR_LOCAL_CONVERT:-0}" == "1" ]]; then
+      echo "!! FunASR download failed; installing local-conversion deps then retrying."
+      pip install -r "$MACOS_DIR/requirements-convert.txt"
+      python "$MACOS_DIR/ensure_funasr.py" --out "$MACOS_DIR/models/funasr_coreml" \
+        || MODEL_FAIL=1
+    else
+      echo "!! FunASR model setup failed; re-run with FUNASR_LOCAL_CONVERT=1"
+      echo "   to build it locally (needs requirements-convert.txt)."
+      MODEL_FAIL=1
+    fi
+  fi
 fi
 
 # 4. Qwen3-ASR GGUF (GPU) -----------------------------------------------------
 # Downloaded from HuggingFace (with hf-mirror.com fallback) -- no manual URL.
 if [[ "${SKIP_QWEN_DOWNLOAD:-0}" != "1" ]]; then
   echo "==> Ensuring Qwen3-ASR GGUF is present"
-  python "$MACOS_DIR/ensure_qwen3.py" --out "$MACOS_DIR/models/qwen3_asr" || \
-    echo "!! Qwen3-ASR download failed; set VOXKEY_QWEN3_URLS to override."
+  python "$MACOS_DIR/ensure_qwen3.py" --out "$MACOS_DIR/models/qwen3_asr" || MODEL_FAIL=1
+fi
+
+if [[ "$MODEL_FAIL" != "0" ]]; then
+  echo "!! Setup incomplete: one or more ASR models are missing." >&2
+  echo "   The service will not run until models are available." >&2
+  exit 1
 fi
 
 echo "==> Setup complete. Activate with: source $VENV/bin/activate"

@@ -155,11 +155,14 @@ class DualEngineOrchestrator:
             fa = results.get(EngineKind.FUNASR_NCE)
             qw = results.get(EngineKind.QWEN3_GPU)
 
-        # If every enabled engine failed, escalate instead of silently returning
-        # empty text with a success status. Callers (service.py) turn this into
-        # a 5xx so the client sees a real failure rather than "success, no text".
-        if (fa is not None and not fa.ok) and (qw is not None and not qw.ok):
-            errs = [e.error for e in (fa, qw) if e and e.error]
+        # Escalate if *every enabled* engine failed, so we never return a
+        # "success, empty text" response. In single-engine mode only one engine
+        # runs, so we must judge by the engines that were actually started
+        # (the ones in ``engines``), not require both results to be present.
+        ran_keys = [key for _engine, key in engines]
+        ran = [results.get(k) for k in ran_keys]
+        if ran and all(r is not None and not r.ok for r in ran):
+            errs = [r.error for r in ran if r and r.error]
             raise RuntimeError("all engines failed: " + "; ".join(errs or ["unknown"]))
 
         final_text, chosen = self._fuse(fa, qw)

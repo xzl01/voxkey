@@ -97,7 +97,7 @@ bash back-end/platforms/macos/setup.sh
 
 | 场景 | 做法 |
 | --- | --- |
-| 用自带预转换包 | `VOXKEY_FUNASR_URLS=https://.../funasr_coreml.tar.gz python ensure_funasr.py --out models/funasr_coreml` |
+| 用自带预转换包 | `VOXKEY_FUNASR_URLS=https://.../funasr_coreml.tar.gz python ensure_funasr.py --out models/funasr_coreml`（URL 可直接是完整 `.tar.gz` 文件，也可填其所在目录；校验哈希取自仓库 `manifests/funasr_coreml.json`） |
 | 用其它 Qwen3 镜像 | `VOXKEY_QWEN3_URLS=... VOXKEY_QWEN3_MIRRORS=... python ensure_qwen3.py --out models/qwen3_asr` |
 | 跳过某引擎 | `SKIP_FUNASR_CONVERT=1` / `SKIP_QWEN_DOWNLOAD=1` 再跑 `setup.sh` |
 | 纯本地转换 FunASR | `python convert_funasr_coreml.py --model iic/SenseVoiceSmall --out models/funasr_coreml --quantize int8`（跳过下载改用本地转换：`python ensure_funasr.py --out models/funasr_coreml --no-convert`） |

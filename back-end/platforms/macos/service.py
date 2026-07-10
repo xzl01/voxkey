@@ -310,18 +310,42 @@ async def transcribe_stream(request: Request) -> StreamingResponse:
                 partial = np.concatenate(buf)
                 # low-latency NCE partial
                 if orch.funasr and len(partial) > 16_000 * 0.4:
-                    tr = orch.funasr.transcribe(partial)
-                    if tr.text.strip():
+                    try:
+                        tr = orch.funasr.transcribe(partial)
+                    except Exception:  # noqa: BLE001
+                        # A partial failure must not tear down the SSE stream;
+                        # just skip this partial and keep streaming.
+                        logger.exception("NCE partial transcription failed")
+                        tr = None
+                    if tr is not None and tr.ok and tr.text.strip():
                         yield _sse("partial", {"text": tr.text, "compute": "ane"})
         finally:
             cap.stop()
             stop["t"] = True
 
         full = np.concatenate(buf) if buf else np.zeros(0, dtype=np.float32)
-        if len(full) > 0:
-            result = orch.transcribe(full)
-            yield _sse("final", result.to_json())
-        yield _sse("end", {})
+        try:
+            if len(full) > 0:
+                result = orch.transcribe(full)
+                yield _sse("final", result.to_json())
+            else:
+                yield _sse(
+                    "final",
+                    {
+                        "text": "",
+                        "chosen_engine": "",
+                        "total_latency_s": 0,
+                        "funasr": None,
+                        "qwen3": None,
+                    },
+                )
+        except Exception as exc:  # noqa: BLE001
+            # Surface the failure as an explicit error event instead of an
+            # abrupt connection drop (uses the orchestrator's exception path).
+            logger.exception("streaming transcription failed")
+            yield _sse("error", {"error": f"{type(exc).__name__}: {exc}"})
+        finally:
+            yield _sse("end", {})
 
     return StreamingResponse(event_gen(), media_type="text/event-stream")
 

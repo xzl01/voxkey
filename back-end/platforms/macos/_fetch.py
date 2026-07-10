@@ -22,12 +22,27 @@ from pathlib import Path
 
 
 def _iter_urls(base_url: str, path: str, mirrors: list[str]) -> list[str]:
+    """Build the candidate URLs for ``path``.
+
+    Accepts either a *base directory* (the file name is appended) or a *full
+    archive URL* already ending in ``path`` (used as-is). This lets
+    ``VOXKEY_FUNASR_URLS`` point at either a release folder or the complete
+    ``.tar.gz`` URL, matching the README examples.
+    """
+    norm = path.lstrip("/")
+
+    def _join(base: str) -> str:
+        b = base.rstrip("/")
+        if b == norm or b.endswith("/" + norm):
+            return b  # base already includes the file name
+        return b + "/" + norm
+
     urls: list[str] = []
     if base_url:
-        urls.append(base_url.rstrip("/") + "/" + path.lstrip("/"))
+        urls.append(_join(base_url))
     for m in mirrors or []:
         if m:
-            urls.append(m.rstrip("/") + "/" + path.lstrip("/"))
+            urls.append(_join(m))
     seen: set[str] = set()
     out: list[str] = []
     for u in urls:

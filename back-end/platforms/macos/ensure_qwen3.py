@@ -18,6 +18,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 
@@ -32,6 +33,10 @@ REQUIRED = [
     "qwen3_asr_llm.q4_k.gguf",
 ]
 
+# Committed per-file SHA-256 manifest. Verified by default on every install,
+# so tampered/mismatched release assets are rejected instead of used blindly.
+DEFAULT_MANIFEST = Path(__file__).resolve().parent / "manifests" / "qwen3_asr.json"
+
 
 def _mirrors(explicit: str | None) -> list[str]:
     if explicit:
@@ -42,23 +47,37 @@ def _mirrors(explicit: str | None) -> list[str]:
     return [HF_MIRROR]
 
 
-def _manifest(explicit: str | None) -> dict[str, str]:
-    """Optional filename -> sha256 map for integrity verification.
+def _load_manifest(src: str | None) -> dict[str, str]:
+    """Load a filename -> sha256 map from a JSON file path or an inline JSON string.
 
-    Source precedence: explicit --manifest path, then VOXKEY_QWEN3_SHA256S
-    (a JSON object string), then an empty map (no verification).
+    A path that exists and is a regular file is read; otherwise the value is
+    parsed as inline JSON. Invalid/empty entries are dropped so verification is
+    simply skipped for those files rather than failing the run.
     """
-    raw = explicit or os.environ.get("VOXKEY_QWEN3_SHA256S", "")
-    if not raw:
+    if not src:
         return {}
-    import json
-
+    raw = src
+    p = Path(src)
+    if p.is_file():
+        try:
+            raw = p.read_text(encoding="utf-8")
+        except OSError as exc:
+            print(f"!! cannot read manifest {src}: {exc}")
+            return {}
     try:
         data = json.loads(raw)
-        if isinstance(data, dict):
-            return {k: str(v) for k, v in data.items()}
     except json.JSONDecodeError:
         print("!! invalid SHA256 manifest; skipping verification")
+        return {}
+    if isinstance(data, dict):
+        return {k: str(v) for k, v in data.items() if v}
+    return {}
+
+
+def _default_manifest() -> dict[str, str]:
+    """Repo-pinned per-file SHA-256 manifest, verified by default on every install."""
+    if DEFAULT_MANIFEST.is_file():
+        return _load_manifest(str(DEFAULT_MANIFEST))
     return {}
 
 
@@ -70,7 +89,8 @@ def main() -> int:
     ap.add_argument(
         "--manifest",
         default=None,
-        help="path to JSON file mapping each weight filename to its expected SHA-256",
+        help="path to a JSON file (or inline JSON) mapping each weight filename "
+        "to its expected SHA-256; overrides the committed default manifest",
     )
     args = ap.parse_args()
     out = Path(args.out).expanduser()
@@ -82,7 +102,9 @@ def main() -> int:
         return 0
 
     mirrors = _mirrors(args.mirrors)
-    manifest = _manifest(args.manifest)
+    # Explicit --manifest overrides the committed default; otherwise verify
+    # against the repo-pinned hashes on every install.
+    manifest = _load_manifest(args.manifest) or _default_manifest()
     print(f"Downloading {len(missing)} Qwen3-ASR file(s) from {args.base_url}")
     if mirrors:
         print(f"  mirrors: {mirrors}")
