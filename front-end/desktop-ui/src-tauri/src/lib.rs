@@ -1,10 +1,5 @@
 use serde::Serialize;
-use std::{
-    collections::HashMap,
-    fs,
-    path::PathBuf,
-    time::Duration,
-};
+use std::{collections::HashMap, fs, path::PathBuf, time::Duration};
 use tauri::Manager;
 
 const SETTINGS_FILE: &str = "settings.json";
@@ -261,9 +256,20 @@ fn probe_asr_service(url: String) -> AsrServiceStatus {
             Ok(resp) => {
                 let status_ok = resp.status().is_success();
                 let body = resp.text().unwrap_or_default();
+                // Parse the JSON health payload and read the boolean `ok` field
+                // rather than string-matching. The macOS service returns a compact
+                // payload ({"ok":true,...}); a plain substring check would miss or
+                // mis-handle it.
                 let healthy = status_ok
-                    && body.contains("\"ok\": true")
-                    && body.contains("voxkey-asr");
+                    && serde_json::from_str::<serde_json::Value>(&body)
+                        .map(|v| {
+                            v.get("ok").and_then(|o| o.as_bool()).unwrap_or(false)
+                                && v.get("service")
+                                    .and_then(|s| s.as_str())
+                                    .map(|s| s.contains("voxkey-asr"))
+                                    .unwrap_or(false)
+                        })
+                        .unwrap_or(false);
                 AsrServiceStatus {
                     reachable: healthy,
                     url,
@@ -271,7 +277,7 @@ fn probe_asr_service(url: String) -> AsrServiceStatus {
                     detail: if healthy {
                         "voxkey-asr health check passed".into()
                     } else {
-                        "service responded but did not return the expected health payload".into()
+                        "service responded but did not return a valid health payload".into()
                     },
                 }
             }
@@ -298,14 +304,14 @@ fn probe_asr_service(url: String) -> AsrServiceStatus {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(    tauri::generate_handler![
-        list_runtime_candidates,
-        load_settings,
-        save_selected_runtime,
-        save_asr_settings,
-        get_asr_service_status,
-        model_status
-    ])
+        .invoke_handler(tauri::generate_handler![
+            list_runtime_candidates,
+            load_settings,
+            save_selected_runtime,
+            save_asr_settings,
+            get_asr_service_status,
+            model_status
+        ])
         .run(tauri::generate_context!())
         .expect("failed to run VoxKey desktop shell");
 }

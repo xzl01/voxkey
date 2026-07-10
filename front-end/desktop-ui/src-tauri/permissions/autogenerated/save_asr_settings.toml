@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-asr-settings"
+description = "Enables the save_asr_settings command without any pre-configured scope."
+commands.allow = ["save_asr_settings"]
+
+[[permission]]
+identifier = "deny-save-asr-settings"
+description = "Denies the save_asr_settings command without any pre-configured scope."
+commands.deny = ["save_asr_settings"]

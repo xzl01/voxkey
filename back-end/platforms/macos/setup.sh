@@ -7,8 +7,10 @@
 # What this does:
 #   1. Install Homebrew system deps (ffmpeg, python, portaudio, rust).
 #   2. Create a Python venv and install macOS ASR requirements.
-#   3. (Optional) Pull + convert the FunASR model to Core ML for the NCE path.
-#   4. (Optional) Download the Qwen3-ASR GGUF weights for the GPU path.
+#   3. Ensure the FunASR Core ML (NCE) model. Prefers a one-shot download of the
+#      pre-converted package; falls back to a local torch export if offline.
+#   4. Download the Qwen3-ASR GGUF (GPU) weights from HuggingFace (with an
+#      hf-mirror.com fallback) -- no manual URL needed.
 #
 # Run from the repo root:
 #   bash back-end/platforms/macos/setup.sh
@@ -42,22 +44,20 @@ python -m pip install --upgrade pip
 pip install -r "$MACOS_DIR/requirements.txt"
 
 # 3. FunASR -> Core ML (NCE) --------------------------------------------------
-# Converts Paraformer/SenseVoice ONNX exports to .mlpackage with int8/fp16
-# quantization so the encoder runs on the Apple Neural Engine.
+# Prefer the pre-converted package (one download, no torch needed); fall back
+# to a local torch export if the package source is unavailable.
 if [[ "${SKIP_FUNASR_CONVERT:-0}" != "1" ]]; then
-  echo "==> Converting FunASR model to Core ML (NCE)"
-  python "$MACOS_DIR/convert_funasr_coreml.py" \
-    --model sensevoice_small \
-    --out "$MACOS_DIR/models/funasr_coreml" \
-    --quantize int8 || echo "!! FunASR conversion failed; run manually. Continuing."
+  echo "==> Ensuring FunASR Core ML model (NCE)"
+  python "$MACOS_DIR/ensure_funasr.py" --out "$MACOS_DIR/models/funasr_coreml" || \
+    echo "!! FunASR model setup failed; run convert_funasr_coreml.py manually."
 fi
 
 # 4. Qwen3-ASR GGUF (GPU) -----------------------------------------------------
-# The llama.cpp Metal backend loads the int4 GGUF shipped by the qwen-asr project.
+# Downloaded from HuggingFace (with hf-mirror.com fallback) -- no manual URL.
 if [[ "${SKIP_QWEN_DOWNLOAD:-0}" != "1" ]]; then
   echo "==> Ensuring Qwen3-ASR GGUF is present"
   python "$MACOS_DIR/ensure_qwen3.py" --out "$MACOS_DIR/models/qwen3_asr" || \
-    echo "!! Qwen3-ASR download skipped/failed; set model_dir in config manually."
+    echo "!! Qwen3-ASR download failed; set VOXKEY_QWEN3_URLS to override."
 fi
 
 echo "==> Setup complete. Activate with: source $VENV/bin/activate"

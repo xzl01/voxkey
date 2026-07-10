@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-selected-runtime"
+description = "Enables the save_selected_runtime command without any pre-configured scope."
+commands.allow = ["save_selected_runtime"]
+
+[[permission]]
+identifier = "deny-save-selected-runtime"
+description = "Denies the save_selected_runtime command without any pre-configured scope."
+commands.deny = ["save_selected_runtime"]

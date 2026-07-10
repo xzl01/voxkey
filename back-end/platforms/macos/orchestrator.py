@@ -113,7 +113,21 @@ class DualEngineOrchestrator:
             )
 
         def _run(engine, key):
-            tr = engine.transcribe(waveform, language=language)
+            try:
+                tr = engine.transcribe(waveform, language=language)
+            except Exception as exc:  # noqa: BLE001
+                # A real inference error must surface as a failed Transcript,
+                # not a swallowed thread traceback that later yields empty text
+                # with HTTP 200. The orchestrator records it so callers can
+                # decide (and the service layer can escalate to a 5xx).
+                logger.exception("engine %s failed", key.value)
+                tr = Transcript(
+                    text="",
+                    engine=key,
+                    latency_s=0.0,
+                    ok=False,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
             with lock:
                 results[key] = tr
             if on_partial is not None:
@@ -140,6 +154,13 @@ class DualEngineOrchestrator:
         with lock:
             fa = results.get(EngineKind.FUNASR_NCE)
             qw = results.get(EngineKind.QWEN3_GPU)
+
+        # If every enabled engine failed, escalate instead of silently returning
+        # empty text with a success status. Callers (service.py) turn this into
+        # a 5xx so the client sees a real failure rather than "success, no text".
+        if (fa is not None and not fa.ok) and (qw is not None and not qw.ok):
+            errs = [e.error for e in (fa, qw) if e and e.error]
+            raise RuntimeError("all engines failed: " + "; ".join(errs or ["unknown"]))
 
         final_text, chosen = self._fuse(fa, qw)
         total = time.perf_counter() - t0

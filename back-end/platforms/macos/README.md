@@ -76,38 +76,40 @@ swiftc -O capture_helper.swift  -o capture_helper    # 实时录音
 swiftc -O hotkey_helper.swift   -o hotkey_helper     # 全局热键
 ```
 
-## 模型选型与转换（需求 2）
+## 模型获取（需求 2）
 
-### FunASR → ONNX（NCE，经 ORT-CoreML 跑 ANE）
+权重不入库（见仓库根 `.gitignore` 的 `models/`），首次由 `setup.sh` 自动拉齐：
 
 ```bash
-# 自动从 ModelScope 导出 iic/SenseVoiceSmall 的 ONNX，int8 量化，
-# 并落地 am.mvn / tokens.txt / frontend.json
-python convert_funasr_coreml.py --model iic/SenseVoiceSmall \
-    --out models/funasr_coreml --quantize int8
+bash back-end/platforms/macos/setup.sh
 ```
 
-> 模型 id 必须是 `iic/SenseVoiceSmall`（短名 `sensevoice_small` 在 ModelScope 上 404）。
-> 导出需要 `funasr` + `modelscope` + `torch` + `torchaudio` + `onnxscript` + `sentencepiece`。
+脚本会依次确保两个引擎的模型，**无需手动给 URL**：
+
+* **FunASR（NCE / ANE）**：优先从 GitHub Release 下载预转换好的 `funasr_coreml` 包
+  （`model.onnx` + `am.mvn` + `tokens.txt` + `frontend.json`），一键解压即用；
+  若下载源不可达，则回退到本地 `torch`/`funasr` 导出（见下）。
+* **Qwen3-ASR（GPU / Metal）**：从 HuggingFace
+  `nzyaltair/Qwen3-ASR-0.6B-gguf` 下载 int4 编码器 ONNX + q4_k LLM GGUF，
+  并自动用 `hf-mirror.com` 镜像回退。
+
+### 可选：离线 / 自定义源
+
+| 场景 | 做法 |
+| --- | --- |
+| 用自带预转换包 | `VOXKEY_FUNASR_URLS=https://.../funasr_coreml.tar.gz python ensure_funasr.py --out models/funasr_coreml` |
+| 用其它 Qwen3 镜像 | `VOXKEY_QWEN3_URLS=... VOXKEY_QWEN3_MIRRORS=... python ensure_qwen3.py --out models/qwen3_asr` |
+| 跳过某引擎 | `SKIP_FUNASR_CONVERT=1` / `SKIP_QWEN_DOWNLOAD=1` 再跑 `setup.sh` |
+| 纯本地转换 FunASR | `python convert_funasr_coreml.py --model iic/SenseVoiceSmall --out models/funasr_coreml --quantize int8`（跳过下载改用本地转换：`python ensure_funasr.py --out models/funasr_coreml --no-convert`） |
+
+> FunASR 模型 id 必须是 `iic/SenseVoiceSmall`（短名 `sensevoice_small` 在 ModelScope 上 404）。
+> 本地转换需要 `funasr` + `modelscope` + `torch` + `torchaudio` + `onnxscript` + `sentencepiece`；
 > 脚本内部已强制 `torch.onnx.export(dynamo=False)`，以规避 torch≥2.13 dynamo 导出器在
 > `onnx.version_converter` 上把 Pad 降到 opset 17 时崩溃的问题。
 
-转换脚本做了三件事：① `coremltools.convert` 生成 float32 `.mlpackage`；
-② `ct.optimize.coreml.linear_quantize_weights` 做 int8（或 fp16/int4）训练后量化；
-③ 拷贝 `tokens.txt` 供解码。量化权重以 ANE 友好的打包格式存放，省内存、提速。
-
-### Qwen3-ASR → GGUF（GPU）
-
-```bash
-# 权重来自 HuggingFace（int4 编码器 ONNX + q4_k LLM GGUF）
-python ensure_qwen3.py --out models/qwen3_asr \
-    --base-url https://huggingface.co/nzyaltair/Qwen3-ASR-0.6B-gguf/resolve/main
-```
-
-> 注意：`ensure_qwen3.py` 期望的文件名是 `qwen3_asr_encoder_frontend.int4.onnx`、
+> Qwen3 文件名约定：`qwen3_asr_encoder_frontend.int4.onnx`、
 > `qwen3_asr_encoder_backend.int4.onnx`、`qwen3_asr_llm.q4_k.gguf`（LLM 是 **q4_k** 而非
-> int4）。`config.json` 的 `qwen3_gpu.llm_fn` 也要与之对应。加载走 `llama-cpp-python`
-> 的 Metal 后端，不在 `inference/bin/` 放 dylib。
+> int4），需与 `config.json` 的 `qwen3_gpu.llm_fn` 对应。加载走 `llama-cpp-python` 的 Metal 后端。
 
 ## 运行
 
