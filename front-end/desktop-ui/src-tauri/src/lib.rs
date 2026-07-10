@@ -3,14 +3,12 @@ use std::{
     collections::HashMap,
     fs,
     io::{Read, Write},
-    net::{SocketAddr, TcpStream},
     path::PathBuf,
     time::Duration,
 };
 use tauri::Manager;
 
 const SETTINGS_FILE: &str = "settings.json";
-const DEFAULT_ASR_PORT: u16 = 17863;
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -232,83 +230,68 @@ fn save_settings_file(
         .map_err(|err| format!("failed to write {}: {err}", path.display()))
 }
 
-fn parse_asr_url(url: &str) -> (String, u16, String) {
-    let without_scheme = match url.split_once("://") {
-        Some((_, rest)) => rest,
-        None => url,
-    };
-    let authority_path = without_scheme
-        .split(['?', '#'])
-        .next()
-        .unwrap_or(without_scheme);
-    let (authority, path) = match authority_path.split_once('/') {
-        Some((a, p)) => (a, format!("/{p}")),
-        None => (authority_path, "/".to_string()),
-    };
-    let (host, port) = match authority.rsplit_once(':') {
-        Some((h, p)) => match p.parse::<u16>() {
-            Ok(port) => (h.to_string(), port),
-            Err(_) => (authority.to_string(), DEFAULT_ASR_PORT),
-        },
-        None => (authority.to_string(), DEFAULT_ASR_PORT),
-    };
-    (host, port, path)
-}
-
 fn probe_asr_service(url: String) -> AsrServiceStatus {
-    let (host, port, _path) = parse_asr_url(&url);
-    let addr: SocketAddr = format!("{host}:{port}")
-        .parse()
-        .unwrap_or_else(|_| SocketAddr::from(([127, 0, 0, 1], DEFAULT_ASR_PORT)));
-    let timeout = Duration::from_millis(600);
+    // Run the blocking HTTP call on a dedicated OS thread. Tauri may invoke
+    // this command from inside its async runtime, where reqwest::blocking would
+    // panic; isolating it behind std::thread avoids that entirely.
+    let fallback_url = url.clone();
+    let handle = std::thread::spawn(move || {
+        let url = url;
+        let client = match reqwest::blocking::Client::builder()
+            .timeout(Duration::from_millis(800))
+            .build()
+        {
+            Ok(client) => client,
+            Err(err) => {
+                return AsrServiceStatus {
+                    reachable: false,
+                    url,
+                    status: "error".into(),
+                    detail: format!("failed to build http client: {err}"),
+                };
+            }
+        };
 
-    let mut stream = match TcpStream::connect_timeout(&addr, timeout) {
-        Ok(stream) => stream,
-        Err(err) => {
-            return AsrServiceStatus {
+        let target = if url.ends_with('/') {
+            format!("{url}health")
+        } else {
+            format!("{url}/health")
+        };
+
+        match client.get(&target).send() {
+            Ok(resp) => {
+                let status_ok = resp.status().is_success();
+                let body = resp.text().unwrap_or_default();
+                let healthy = status_ok
+                    && body.contains("\"ok\": true")
+                    && body.contains("voxkey-asr");
+                AsrServiceStatus {
+                    reachable: healthy,
+                    url,
+                    status: if healthy { "online" } else { "unhealthy" }.into(),
+                    detail: if healthy {
+                        "voxkey-asr health check passed".into()
+                    } else {
+                        "service responded but did not return the expected health payload".into()
+                    },
+                }
+            }
+            Err(err) => AsrServiceStatus {
                 reachable: false,
                 url,
                 status: "offline".into(),
                 detail: err.to_string(),
-            };
+            },
         }
-    };
+    });
 
-    let _ = stream.set_read_timeout(Some(timeout));
-    let _ = stream.set_write_timeout(Some(timeout));
-
-    let request =
-        format!("GET /health HTTP/1.1\r\nHost: {host}:{port}\r\nConnection: close\r\n\r\n");
-    if let Err(err) = stream.write_all(request) {
-        return AsrServiceStatus {
+    match handle.join() {
+        Ok(status) => status,
+        Err(_) => AsrServiceStatus {
             reachable: false,
-            url,
+            url: fallback_url,
             status: "error".into(),
-            detail: format!("failed to write health request: {err}"),
-        };
-    }
-
-    let mut response = String::new();
-    if let Err(err) = stream.read_to_string(&mut response) {
-        return AsrServiceStatus {
-            reachable: false,
-            url,
-            status: "error".into(),
-            detail: format!("failed to read health response: {err}"),
-        };
-    }
-
-    let http_ok = response.starts_with("HTTP/1.0 200") || response.starts_with("HTTP/1.1 200");
-    let healthy = http_ok && response.contains("\"ok\": true") && response.contains("voxkey-asr");
-
-    AsrServiceStatus {
-        reachable: healthy,
-        url,
-        status: if healthy { "online" } else { "unhealthy" }.into(),
-        detail: if healthy {
-            "voxkey-asr health check passed".into()
-        } else {
-            "service responded but did not return expected health payload".into()
+            detail: "health check thread panicked".into(),
         },
     }
 }

@@ -63,8 +63,23 @@ def commit_text(text: str, *, notify: bool = True) -> None:
         notify_mac(text)
 
 
+def _applescript_escape(value: str) -> str:
+    """Escape a value for safe embedding inside an AppleScript double-quoted
+    literal. Prevents quote-breaking and script injection from (possibly remote)
+    transcription text."""
+    return (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r", " ")
+        .replace("\n", " ")
+    )
+
+
 def notify_mac(text: str, title: str = "简听输入") -> None:
-    script = f'display notification "{text[:100]}" with title "{title}"'
+    script = (
+        f'display notification "{_applescript_escape(text[:200])}" '
+        f'with title "{_applescript_escape(title)}"'
+    )
     subprocess.run(["osascript", "-e", script], capture_output=True, check=False)
 
 

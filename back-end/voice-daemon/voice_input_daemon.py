@@ -153,12 +153,15 @@ def apply_ui_settings(raw: dict[str, Any]) -> dict[str, Any]:
         log(f"UI settings at {path} unreadable ({exc}); using config.json only")
         return raw
 
+    # Tauri serializes DesktopSettings with snake_case keys (serde default), so
+    # the UI's settings.json matches the daemon's config.json casing. Overlay
+    # using the same snake_case keys the UI actually writes.
     mapping = {
-        "asrBackend": "asr_backend",
-        "asrServiceUrl": "asr_service_url",
-        "asrFallbackLocal": "asr_fallback_local",
-        "asrHttpTimeout": "asr_http_timeout",
-        "selectedRuntimeId": "selected_runtime_id",
+        "asr_backend": "asr_backend",
+        "asr_service_url": "asr_service_url",
+        "asr_fallback_local": "asr_fallback_local",
+        "asr_http_timeout": "asr_http_timeout",
+        "selected_runtime_id": "selected_runtime_id",
     }
     overridden = []
     for ui_key, cfg_key in mapping.items():

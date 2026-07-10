@@ -208,17 +208,41 @@ def engines() -> JSONResponse:
 
 @app.post("/engines")
 async def set_engines(request: Request) -> JSONResponse:
-    """Hot-swap engines: update enablement, persist to config, rebuild orchestrator."""
+    """Hot-swap engines.
+
+    Builds the new orchestrator *before* touching disk or in-memory state, so a
+    failed rebuild (e.g. both engines disabled) leaves the running service
+    untouched. The previous engines are shut down only after the swap, releasing
+    their GPU/ANE resources.
+    """
     body = await request.json()
     enabled = body.get("enabled", {})
+    new_config = dict(ENGINE_CONFIG)
     for engine_id in ENGINE_DEFS:
         if engine_id in enabled:
-            ENGINE_CONFIG[engine_id] = bool(enabled[engine_id])
-    persist_engine_config()
+            new_config[engine_id] = bool(enabled[engine_id])
+
+    if not any(new_config.values()):
+        return JSONResponse(
+            {"error": "at least one engine must remain enabled"}, status_code=400
+        )
+
     try:
-        STATE["orch"] = load_engines(ENGINE_CONFIG)
+        new_orch = load_engines(new_config)
     except RuntimeError as exc:
-        logger.warning("Engine rebuild left no engine loaded: %s", exc)
+        return JSONResponse({"error": f"engine rebuild failed: {exc}"}, status_code=500)
+
+    old = STATE.get("orch")
+    STATE["orch"] = new_orch
+    ENGINE_CONFIG.clear()
+    ENGINE_CONFIG.update(new_config)
+    persist_engine_config()
+
+    if old:
+        if old.funasr:
+            old.funasr.shutdown()
+        if old.qwen3:
+            old.qwen3.shutdown()
     return JSONResponse(build_engines_payload())
 
 

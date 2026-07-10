@@ -92,6 +92,26 @@ class DualEngineOrchestrator:
         results: dict[EngineKind, Transcript] = {}
         lock = threading.Lock()
 
+        # Skip engines that are disabled (None). Spawning a worker for a None
+        # engine would raise inside the background thread and only surface as a
+        # swallowed error, so guard here instead.
+        engines = [
+            (engine, key)
+            for engine, key in (
+                (self.funasr, EngineKind.FUNASR_NCE),
+                (self.qwen3, EngineKind.QWEN3_GPU),
+            )
+            if engine is not None
+        ]
+        if not engines:
+            return DualResult(
+                final_text="",
+                funasr=None,
+                qwen3=None,
+                chosen=EngineKind.FUNASR_NCE,
+                total_s=0.0,
+            )
+
         def _run(engine, key):
             tr = engine.transcribe(waveform, language=language)
             with lock:
@@ -100,10 +120,7 @@ class DualEngineOrchestrator:
                 on_partial(tr)
 
         threads = []
-        for engine, key in (
-            (self.funasr, EngineKind.FUNASR_NCE),
-            (self.qwen3, EngineKind.QWEN3_GPU),
-        ):
+        for engine, key in engines:
             th = threading.Thread(target=_run, args=(engine, key), daemon=True)
             threads.append(th)
             th.start()
