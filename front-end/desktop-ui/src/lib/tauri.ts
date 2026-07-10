@@ -102,6 +102,12 @@ export async function getAsrServiceStatus(): Promise<AsrServiceStatus> {
   return invoke<AsrServiceStatus>("get_asr_service_status");
 }
 
+/** Read-only local ASR service auth token (so the webview can call the
+ * protected mic / model / transcribe endpoints). */
+export async function getAsrToken(): Promise<string> {
+  return invoke<string>("get_asr_token");
+}
+
 export async function modelStatus(): Promise<EngineInfo[]> {
   return invoke<EngineInfo[]>("model_status");
 }

@@ -7,8 +7,9 @@ import { StatusPill } from "../components/StatusPill";
 import { Skeleton } from "../components/Skeleton";
 import { useI18n } from "../i18n";
 import { useToast } from "../hooks/useToast";
-import { getEngines, setEngines } from "../lib/api";
+import { getEngines, setEngines, LOCAL_ASR_BASE } from "../lib/api";
 import { modelStatus } from "../lib/tauri";
+import { useSettings } from "../hooks/useSettings";
 import type { ComputeClass, EngineInfo } from "../lib/tauri";
 import styles from "./ModelsPage.module.css";
 
@@ -33,15 +34,20 @@ function formatBytes(bytes?: number): string {
 export function ModelsPage() {
   const { t } = useI18n();
   const { showToast } = useToast();
+  const { settings } = useSettings();
   const [engines, setEnginesState] = useState<EngineInfo[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [serviceReachable, setServiceReachable] = useState(true);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
 
+  // Honour the user-saved service address; fall back to the bundled default
+  // only when the setting is empty.
+  const baseUrl = settings.asr_service_url || LOCAL_ASR_BASE;
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getEngines();
+      const data = await getEngines(baseUrl);
       setEnginesState(data);
       setServiceReachable(true);
     } catch {
@@ -56,7 +62,7 @@ export function ModelsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [baseUrl]);
 
   useEffect(() => {
     load();
@@ -66,11 +72,11 @@ export function ModelsPage() {
     async (engine: EngineInfo) => {
       setSwitchingId(engine.id);
       try {
-        const next = await setEngines({ [engine.id]: !engine.enabled });
+        const next = await setEngines({ [engine.id]: !engine.enabled }, baseUrl);
         setEnginesState(next);
         // Heavy models reload asynchronously inside the service; re-confirm shortly.
         window.setTimeout(() => {
-          getEngines()
+          getEngines(baseUrl)
             .then(setEnginesState)
             .catch(() => undefined);
         }, 1500);
@@ -82,7 +88,7 @@ export function ModelsPage() {
         setSwitchingId(null);
       }
     },
-    [t, showToast],
+    [t, showToast, baseUrl],
   );
 
   return (

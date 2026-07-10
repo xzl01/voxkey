@@ -17,8 +17,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import select
 import subprocess
 import tempfile
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import AsyncIterator, Iterator
@@ -30,6 +34,7 @@ logger = logging.getLogger("voxkey.audio")
 
 TARGET_RATE = 16_000
 TARGET_CHANNELS = 1
+CAPTURE_START_TIMEOUT_S = 5.0
 
 
 # --------------------------------------------------------------------------- #
@@ -182,6 +187,12 @@ class MicCapture:
         self.rate = rate
         self.channels = channels
         self._proc: subprocess.Popen | None = None
+        # Guards every access to `_proc` so `stop()` can run from the event
+        # loop / StreamingResponse cleanup while a worker thread is blocked in
+        # `read_frames`. Without this, `stop()` setting `_proc = None` races
+        # with the reader touching `self._proc.stdout` -> AttributeError.
+        self._lock = threading.Lock()
+        self._eof = False
 
     def _ensure_helper(self) -> Path:
         if _HELPER.exists():
@@ -192,57 +203,178 @@ class MicCapture:
             "(requires Xcode command line tools)."
         )
 
-    def start(self) -> None:
-        if self._proc is not None:
-            return
-        helper = self._ensure_helper()
-        self._proc = subprocess.Popen(
-            [str(helper), "--rate", str(self.rate), "--channels", str(self.channels)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            bufsize=0,
-        )
-        # consume the 44-byte WAV header the helper emits
-        assert self._proc.stdout is not None
-        header = self._proc.stdout.read(44)
-        if len(header) != 44:
-            raise RuntimeError("capture_helper did not emit a valid WAV header")
+    def is_running(self) -> bool:
+        """Whether capture is currently active (helper still spawned)."""
+        with self._lock:
+            return self._proc is not None
 
-    def stop(self) -> None:
-        if self._proc is None:
-            return
-        self._proc.terminate()
+    @staticmethod
+    def _terminate_proc(proc: subprocess.Popen) -> None:
+        """Terminate and reap ``proc``; never leave a killed helper as a zombie."""
         try:
-            self._proc.wait(timeout=3)
+            proc.terminate()
+        except OSError:
+            pass
+        try:
+            proc.wait(timeout=3)
+            return
         except subprocess.TimeoutExpired:
-            self._proc.kill()
-        self._proc = None
+            pass
+        try:
+            proc.kill()
+        except OSError:
+            pass
+        try:
+            proc.wait(timeout=3)
+        except (OSError, subprocess.TimeoutExpired):
+            pass
 
-    def read_frames(self, n_frames: int) -> np.ndarray:
-        """Read ``n_frames`` of mono float32 samples (blocking)."""
-        assert self._proc and self._proc.stdout
-        n_bytes = n_frames * self.channels * 2
-        raw = b""
-        while len(raw) < n_bytes:
-            chunk = self._proc.stdout.read(n_bytes - len(raw))
+    @staticmethod
+    def _read_exact_with_timeout(stdout, size: int, timeout_s: float) -> bytes:
+        """Read up to ``size`` bytes from a pipe without blocking forever."""
+        deadline = time.monotonic() + timeout_s
+        fd = stdout.fileno()
+        data = bytearray()
+        while len(data) < size:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError(f"capture_helper startup timed out after {timeout_s:.1f}s")
+            ready, _, _ = select.select([fd], [], [], remaining)
+            if not ready:
+                raise TimeoutError(f"capture_helper startup timed out after {timeout_s:.1f}s")
+            chunk = os.read(fd, size - len(data))
             if not chunk:
                 break
-            raw += chunk
+            data.extend(chunk)
+        return bytes(data)
+
+    def start(self) -> None:
+        # Publish the process handle immediately, then perform the blocking
+        # readiness handshake outside the lock. A concurrent stop/cancellation
+        # can therefore terminate a helper that stalls during startup.
+        with self._lock:
+            if self._proc is not None:
+                return
+            helper = self._ensure_helper()
+            proc = subprocess.Popen(
+                [str(helper), "--rate", str(self.rate), "--channels", str(self.channels)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                bufsize=0,
+            )
+            self._proc = proc
+            self._eof = False
+
+        stdout = proc.stdout
+        if stdout is None:
+            with self._lock:
+                if self._proc is proc:
+                    self._proc = None
+            self._terminate_proc(proc)
+            raise RuntimeError("capture_helper did not open stdout")
+
+        try:
+            # The Swift helper emits this header only AFTER AVAudioEngine starts,
+            # making it a real readiness handshake rather than merely proof that
+            # the child process launched.
+            header = self._read_exact_with_timeout(stdout, 44, CAPTURE_START_TIMEOUT_S)
+            if len(header) != 44 or proc.poll() is not None:
+                raise RuntimeError("capture_helper exited before becoming ready")
+            with self._lock:
+                if self._proc is not proc:
+                    raise RuntimeError("capture_helper was stopped during startup")
+        except Exception as exc:
+            with self._lock:
+                if self._proc is proc:
+                    self._proc = None
+            self._terminate_proc(proc)
+            detail = ""
+            if proc.stderr is not None:
+                try:
+                    detail = proc.stderr.read().decode("utf-8", errors="replace").strip()[-300:]
+                except (OSError, ValueError):
+                    pass
+            suffix = f": {detail}" if detail else ""
+            raise RuntimeError(f"capture_helper failed to start ({exc}){suffix}") from exc
+
+    def stop(self) -> None:
+        # Capture the process under the lock, release the lock BEFORE waiting,
+        # so a worker thread blocked in read_frames can finish / hit EOF
+        # without waiting on this lock. Then terminate + reap.
+        with self._lock:
+            proc = self._proc
+            if proc is None:
+                return
+            self._proc = None
+        self._terminate_proc(proc)
+
+    def read_frames(self, n_frames: int) -> np.ndarray:
+        """Read ``n_frames`` of mono float32 samples (blocking).
+
+        Returns an empty array at end-of-stream (helper exited) so callers can
+        detect EOF instead of busy-looping on a dead pipe. The process handle
+        is captured once under the lock and the actual read happens outside it,
+        so a concurrent `stop()` can never leave us dereferencing a `None`
+        `_proc`.
+        """
+        with self._lock:
+            proc = self._proc
+            if proc is None:
+                self._eof = True
+                return np.zeros(0, dtype=np.float32)
+            stdout = proc.stdout
+        if stdout is None:
+            self._eof = True
+            return np.zeros(0, dtype=np.float32)
+        n_bytes = n_frames * self.channels * 2
+        raw = b""
+        try:
+            while len(raw) < n_bytes:
+                chunk = stdout.read(n_bytes - len(raw))
+                if chunk:
+                    raw += chunk
+                    continue
+                # A blocking read only returns empty at EOF (the helper closed
+                # stdout). Any buffered PCM has already been read, so we must
+                # NOT break on `poll()` alone or we'd drop the tail still in
+                # the pipe after the helper exits. If `stop()` terminated the
+                # helper mid-read, the pipe closes and we also land here.
+                break
+        except (OSError, ValueError):
+            # Pipe closed under us (capture stopped concurrently): end-of-stream.
+            return np.zeros(0, dtype=np.float32)
+        if not raw:
+            self._eof = True
+            return np.zeros(0, dtype=np.float32)
+        # frombuffer needs an even byte count (int16 samples).
+        raw = raw[: len(raw) // 2 * 2]
         samples = np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32768.0
         return samples
 
     def iter_chunks(self, chunk_seconds: float = 0.5) -> Iterator[np.ndarray]:
-        """Yield fixed-length float32 chunks until stopped."""
+        """Yield fixed-length float32 chunks until stopped or EOF."""
         n = int(self.rate * chunk_seconds)
-        while self._proc is not None:
-            yield self.read_frames(n)
+        if n <= 0:
+            return
+        while self.is_running():
+            chunk = self.read_frames(n)
+            if chunk.size == 0:
+                # EOF (helper exited) or a degenerate 0-length request:
+                # stop the capture and stop iterating instead of yielding
+                # empty frames forever.
+                self.stop()
+                break
+            yield chunk
 
 
 async def aiter_chunks(cap: MicCapture, chunk_seconds: float = 0.5) -> AsyncIterator[np.ndarray]:
     loop = asyncio.get_event_loop()
     n = int(cap.rate * chunk_seconds)
-    while cap._proc is not None:
+    if n <= 0:
+        return
+    while cap.is_running():
         chunk = await loop.run_in_executor(None, cap.read_frames, n)
         if chunk.size == 0:
+            cap.stop()
             break
         yield chunk

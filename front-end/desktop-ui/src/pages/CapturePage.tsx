@@ -1,4 +1,4 @@
-import { type ChangeEvent, useRef, useState } from "react";
+import { type ChangeEvent, useEffect, useRef, useState } from "react";
 import { Mic, Square, Upload } from "lucide-react";
 import { Button } from "../components/Button";
 import { Panel } from "../components/Panel";
@@ -24,32 +24,72 @@ export function CapturePage() {
   const [fileBusy, setFileBusy] = useState(false);
 
   const abortRef = useRef<AbortController | null>(null);
+  const liveSessionRef = useRef(0);
+
+  // Leaving the page (e.g. switching the sidebar) unmounts this component.
+  // Abort the in-flight stream so the mic stops immediately instead of
+  // running until maxSeconds elapses.
+  useEffect(() => {
+    return () => {
+      liveSessionRef.current += 1;
+      const controller = abortRef.current;
+      abortRef.current = null;
+      controller?.abort();
+    };
+  }, []);
 
   const startLive = () => {
+    // Defensive cancellation: a previous request may still be settling after
+    // Stop even though the button has already returned to the idle state.
+    abortRef.current?.abort();
     const controller = new AbortController();
+    const session = ++liveSessionRef.current;
     abortRef.current = controller;
+    const isCurrent = () =>
+      liveSessionRef.current === session && abortRef.current === controller;
     setLiveRunning(true);
     setFinalText("");
     setInterimText("");
     streamTranscribe(settings.asr_service_url, {
       signal: controller.signal,
       maxSeconds: 30,
-      onPartial: (text) => setInterimText(text),
+      onPartial: (text) => {
+        if (isCurrent()) setInterimText(text);
+      },
       onFinal: (text) => {
+        if (!isCurrent()) return;
         setFinalText((prev) => (prev ? `${prev} ${text}` : text));
         setInterimText("");
       },
-      onEnd: () => setLiveRunning(false),
+      onEnd: () => {
+        if (isCurrent()) setLiveRunning(false);
+      },
+      onError: (msg) => {
+        if (!isCurrent()) return;
+        console.error("live transcription error:", msg);
+        showToast(t("toast.transcribeFailed"), "error");
+      },
     })
       .catch((err) => {
+        // AbortController.abort() (user clicked Stop) rejects the fetch;
+        // that is a normal stop, not a failure.
+        if (err?.name === "AbortError") return;
+        if (!isCurrent()) return;
         console.error(err);
         showToast(t("toast.transcribeFailed"), "error");
       })
-      .finally(() => setLiveRunning(false));
+      .finally(() => {
+        if (!isCurrent()) return;
+        abortRef.current = null;
+        setLiveRunning(false);
+      });
   };
 
   const stopLive = () => {
-    abortRef.current?.abort();
+    liveSessionRef.current += 1;
+    const controller = abortRef.current;
+    abortRef.current = null;
+    controller?.abort();
     setLiveRunning(false);
   };
 

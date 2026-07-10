@@ -10,6 +10,7 @@
     "allow-save-selected-runtime",
     "allow-save-asr-settings",
     "allow-get-asr-service-status",
-    "allow-model-status"
+    "allow-model-status",
+    "allow-get-asr-token"
   ]
 }

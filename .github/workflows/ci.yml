@@ -25,6 +25,69 @@ jobs:
       - name: Run Python unit tests
         run: python3 -m unittest discover -s back-end/voice-daemon/tests -v
 
+  macos-asr:
+    name: macOS ASR service tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install numpy soundfile fastapi starlette pytest httpx ruff
+
+      - name: Lint macOS ASR service
+        run: ruff check back-end/platforms/macos
+
+      - name: Compile Swift capture helpers
+        working-directory: back-end/platforms/macos
+        run: |
+          swiftc -O capture_helper.swift -o "$RUNNER_TEMP/capture_helper"
+          swiftc -O hotkey_helper.swift -o "$RUNNER_TEMP/hotkey_helper"
+
+      - name: Run macOS ASR service tests (stubbed)
+        # Run from the package dir so `from common import ...` resolves, and
+        # only the stubbed test (no real weights / AISHELL data) so CI is fast
+        # and hermetic.
+        working-directory: back-end/platforms/macos
+        run: python3 -m pytest test/test_service.py -q
+
+      - name: Run macOS ASR real-model tests (optional)
+        # OPTIONAL: test_nce.py needs the large, uncommitted model weights and
+        # AISHELL data. It only runs where those are present (e.g. a local
+        # runner that pulled the weights); CI skips it automatically.
+        if: ${{ hashFiles('back-end/platforms/macos/models/**') != '' }}
+        working-directory: back-end/platforms/macos
+        continue-on-error: true
+        run: python3 -m pytest test/test_nce.py -q
+
+  frontend:
+    name: Frontend type-check & build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check & build (tsc + vite)
+        # `build` runs tsc --noEmit then vite build; this fails the CI if any
+        # TypeScript / Vite error is introduced, which previously slipped
+        # through (only Python + Rust were checked).
+        run: pnpm --filter @voxkey/desktop-ui build
+
   rust-core:
     name: Rust shared core
     runs-on: ubuntu-latest

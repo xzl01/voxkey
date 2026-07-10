@@ -12,6 +12,7 @@ fn main() {
             "save_asr_settings",
             "get_asr_service_status",
             "model_status",
+            "get_asr_token",
         ]),
     ))
     .expect("failed to run tauri-build");

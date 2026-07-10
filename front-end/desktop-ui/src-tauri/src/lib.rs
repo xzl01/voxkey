@@ -301,6 +301,38 @@ fn probe_asr_service(url: String) -> AsrServiceStatus {
     }
 }
 
+/// Read-only access to the local ASR service's per-process auth token. The
+/// Python service atomically writes it to one fixed path at startup; the
+/// webview needs it to call protected endpoints. Path resolution mirrors the
+/// Python side exactly (env override or home-cache default), so a stale fallback
+/// file can never win over the current process token.
+#[tauri::command]
+fn get_asr_token() -> Result<String, String> {
+    let path = match std::env::var("VOXKEY_ASR_TOKEN_FILE") {
+        Ok(value) => {
+            let path = PathBuf::from(value);
+            if !path.is_absolute() {
+                return Err("VOXKEY_ASR_TOKEN_FILE must be an absolute path".into());
+            }
+            path
+        }
+        Err(_) => {
+            let home = std::env::var("HOME").unwrap_or_default();
+            std::path::Path::new(&home)
+                .join("Library")
+                .join("Caches")
+                .join("dev.xzl01.voxkey")
+                .join("asr_token")
+        }
+    };
+    let token = std::fs::read_to_string(&path)
+        .map_err(|err| format!("failed to read ASR token at {}: {err}", path.display()))?;
+    if token.is_empty() {
+        return Err(format!("ASR token at {} is empty", path.display()));
+    }
+    Ok(token)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -310,7 +342,8 @@ pub fn run() {
             save_selected_runtime,
             save_asr_settings,
             get_asr_service_status,
-            model_status
+            model_status,
+            get_asr_token
         ])
         .run(tauri::generate_context!())
         .expect("failed to run VoxKey desktop shell");

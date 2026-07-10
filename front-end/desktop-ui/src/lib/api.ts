@@ -1,4 +1,39 @@
 import type { EngineInfo } from "./tauri";
+import { getAsrToken } from "./tauri";
+
+// The local ASR service mints a per-process auth token at startup and writes
+// it to a file the desktop shell can read. We attach it to the protected (mic
+// / model / transcribe) endpoints so an arbitrary web page on localhost cannot
+// drive them. The token is cached, but on a 401 we drop the cache and re-read
+// once (the service restarts with a fresh token, or the first read raced the
+// service startup) so we don't get stuck on a stale/empty token forever.
+let tokenPromise: Promise<string> | null = null;
+function getAsrTokenCached(): Promise<string> {
+  if (!tokenPromise) {
+    tokenPromise = getAsrToken().catch(() => "");
+  }
+  return tokenPromise;
+}
+
+function withToken(init: RequestInit, token: string): RequestInit {
+  const headers = new Headers(init.headers);
+  headers.set("X-VoxKey-Token", token);
+  return { ...init, headers };
+}
+
+async function fetchWithToken(url: string, init: RequestInit): Promise<Response> {
+  const token = await getAsrTokenCached();
+  const res = await fetch(url, withToken(init, token));
+  if (res.status === 401) {
+    // Stale or empty token: clear the cache, re-read once, and retry.
+    tokenPromise = null;
+    const fresh = await getAsrTokenCached();
+    if (fresh && fresh !== token) {
+      return fetch(url, withToken(init, fresh));
+    }
+  }
+  return res;
+}
 
 export const LOCAL_ASR_BASE = "http://127.0.0.1:17863";
 
@@ -42,7 +77,7 @@ export async function setEngines(
   enabled: Record<string, boolean>,
   baseUrl: string = LOCAL_ASR_BASE,
 ): Promise<EngineInfo[]> {
-  const res = await fetch(`${baseUrl}/engines`, {
+  const res = await fetchWithToken(`${baseUrl}/engines`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ enabled }),
@@ -59,7 +94,7 @@ export async function transcribeFile(
   const url = language
     ? `${baseUrl}/transcribe?language=${encodeURIComponent(language)}`
     : `${baseUrl}/transcribe`;
-  const res = await fetch(url, { method: "POST", body: audio });
+  const res = await fetchWithToken(url, { method: "POST", body: audio });
   if (!res.ok) throw new Error(`transcription failed (${res.status})`);
   return toJson<TranscribeResult>(res);
 }
@@ -89,6 +124,7 @@ export interface StreamTranscribeOptions {
   onStart?: () => void;
   onPartial?: (text: string) => void;
   onFinal?: (text: string, info?: unknown) => void;
+  onError?: (message: string) => void;
   onEnd?: () => void;
 }
 
@@ -120,12 +156,19 @@ export async function streamTranscribe(
   if (opts.emitInterval) params.set("emit_interval", String(opts.emitInterval));
   const url = `${baseUrl}/transcribe/stream?${params.toString()}`;
 
-  const res = await fetch(url, { signal: opts.signal });
+  const res = await fetchWithToken(url, { signal: opts.signal });
   if (!res.ok || !res.body) throw new Error(`streaming failed (${res.status})`);
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let ended = false;
+  const finish = () => {
+    if (!ended) {
+      ended = true;
+      opts.onEnd?.();
+    }
+  };
 
   opts.onStart?.();
 
@@ -144,12 +187,17 @@ export async function streamTranscribe(
         } else if (frame.event === "final") {
           const text = (frame.data.text as string) ?? "";
           opts.onFinal?.(text, frame.data);
+        } else if (frame.event === "error") {
+          // The service streams `event: error` (still HTTP 200); surface it
+          // instead of silently swallowing it.
+          const msg = (frame.data.error as string) ?? "streaming error";
+          opts.onError?.(msg);
         } else if (frame.event === "end") {
-          opts.onEnd?.();
+          finish();
         }
       }
     }
   } finally {
-    opts.onEnd?.();
+    finish();
   }
 }
