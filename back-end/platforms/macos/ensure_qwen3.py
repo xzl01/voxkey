@@ -24,7 +24,7 @@ from pathlib import Path
 
 from _fetch import fetch_one
 
-HF_BASE = "https://huggingface.co/nzyaltair/Qwen3-ASR-0.6B-gguf/resolve/main"
+HF_BASE = "https://github.com/xzl01/voxkey/releases/download/voxkey-models-v1"
 HF_MIRROR = "https://hf-mirror.com/nzyaltair/Qwen3-ASR-0.6B-gguf/resolve/main"
 
 REQUIRED = [

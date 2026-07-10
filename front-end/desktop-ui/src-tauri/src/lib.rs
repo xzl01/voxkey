@@ -1,5 +1,12 @@
 use serde::Serialize;
-use std::{collections::HashMap, fs, path::PathBuf, time::Duration};
+use std::{
+    collections::HashMap,
+    fs,
+    path::PathBuf,
+    process::{Child, Command, Stdio},
+    sync::Mutex,
+    time::Duration,
+};
 use tauri::Manager;
 
 const SETTINGS_FILE: &str = "settings.json";
@@ -151,6 +158,56 @@ fn model_status(app: tauri::AppHandle) -> Vec<EngineInfo> {
         .collect()
 }
 
+/// Locate the directory that holds the ASR service (`service.py` + modules +
+/// `capture_helper` + `config.json`). In a bundled app this is
+/// `<Resources>/asr`; under `tauri dev` it is the repo's
+/// `back-end/platforms/macos`.
+fn asr_bundle_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
+    if let Ok(res) = app.path().resource_dir() {
+        // Bundled layout: <Resources>/asr/service.py
+        let prod = res.join("asr");
+        if prod.join("service.py").exists() {
+            return Some(prod);
+        }
+        // Dev layout: src-tauri/../../../back-end/platforms/macos/service.py
+        let dev = res.join("../../../back-end/platforms/macos");
+        if dev.join("service.py").exists() {
+            return Some(dev);
+        }
+    }
+    None
+}
+
+/// Python interpreter used to launch the ASR service.
+/// Production: `<Resources>/asr/python/bin/python3` (bundled relocatable Python).
+/// Dev: the repo venv at `back-end/platforms/macos/.venv/bin/python`.
+/// Fallback: system `python3`.
+fn asr_python_exe(app: &tauri::AppHandle) -> PathBuf {
+    if let Ok(res) = app.path().resource_dir() {
+        let prod_py = res.join("asr").join("python").join("bin").join("python3");
+        if prod_py.exists() {
+            return prod_py;
+        }
+        let dev_venv = res.join("../../../back-end/platforms/macos/.venv/bin/python");
+        if dev_venv.exists() {
+            return dev_venv;
+        }
+    }
+    PathBuf::from("python3")
+}
+
+/// Default on-disk location of the per-process auth token, mirroring the
+/// Python service's home-cache fallback so the webview (`get_asr_token`) and
+/// the spawned service agree on the same path.
+fn default_token_file() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_default();
+    PathBuf::from(home)
+        .join("Library")
+        .join("Caches")
+        .join("dev.xzl01.voxkey")
+        .join("asr_token")
+}
+
 /// Locate the macOS platform directory that holds `config.json` and `models/`.
 fn resolve_macos_base(app: &tauri::AppHandle) -> Option<PathBuf> {
     // 1. Same env var the Python service reads for its config file.
@@ -167,7 +224,11 @@ fn resolve_macos_base(app: &tauri::AppHandle) -> Option<PathBuf> {
         }
         return Some(models);
     }
-    // 3. Best-effort: walk up from the executable looking for the repo layout.
+    // 3. Bundled (Resources/asr) or dev (repo back-end/platforms/macos) layout.
+    if let Some(base) = asr_bundle_dir(app) {
+        return Some(base);
+    }
+    // 4. Legacy: walk up from the executable looking for the repo layout.
     if let Ok(exe) = std::env::current_exe() {
         let mut dir = exe.parent().map(|p| p.to_path_buf());
         while let Some(candidate) = dir {
@@ -178,7 +239,6 @@ fn resolve_macos_base(app: &tauri::AppHandle) -> Option<PathBuf> {
             dir = candidate.parent().map(|p| p.to_path_buf());
         }
     }
-    let _ = app;
     None
 }
 
@@ -333,9 +393,159 @@ fn get_asr_token() -> Result<String, String> {
     Ok(token)
 }
 
+/// Read-only access to the bundled third-party license / attribution text
+/// (`THIRD_PARTY_LICENSES`), shown in the app's Licenses view. The file lives
+/// next to `service.py` inside the ASR bundle (Resources/asr), so the same
+/// resolution as the service applies for both dev and bundled layouts.
+#[tauri::command]
+fn get_licenses(app: tauri::AppHandle) -> Result<String, String> {
+    let base = asr_bundle_dir(&app).ok_or("could not locate the ASR service bundle")?;
+    let path = base.join("THIRD_PARTY_LICENSES");
+    std::fs::read_to_string(&path)
+        .map_err(|err| format!("failed to read licenses at {}: {err}", path.display()))
+}
+
+/// Owns the optionally-running local ASR service subprocess so the UI can
+/// start/stop it. The Tauri app is responsible for launching the Python
+/// service (which itself spawns the Swift mic helper); without this the app
+/// could only probe an externally-managed service.
+struct ServiceState {
+    child: Mutex<Option<Child>>,
+}
+
+#[tauri::command]
+fn start_asr_service(
+    app: tauri::AppHandle,
+    state: tauri::State<ServiceState>,
+) -> Result<(), String> {
+    // Refuse to double-start; reap a dead child first so a prior crash doesn't
+    // block a restart.
+    {
+        let mut guard = state.child.lock().unwrap();
+        if let Some(child) = guard.as_mut() {
+            match child.try_wait() {
+                Ok(Some(_)) => *guard = None, // already exited -> clear and respawn
+                Ok(None) => return Err("ASR service is already running".into()),
+                Err(e) => return Err(format!("failed to inspect ASR service: {e}")),
+            }
+        }
+    }
+    let base = asr_bundle_dir(&app).ok_or("could not locate the ASR service bundle")?;
+    let python = asr_python_exe(&app);
+    let service_py = base.join("service.py");
+    if !service_py.exists() {
+        return Err(format!("service.py not found at {}", service_py.display()));
+    }
+    let token_file = default_token_file();
+    let mut cmd = Command::new(python);
+    cmd.arg(&service_py)
+        .current_dir(&base)
+        // The launched service reads these same vars (mirroring _startup):
+        .env("VOXKEY_MACOS_CONFIG", base.join("config.json"))
+        .env("VOXKEY_ASR_TOKEN_FILE", &token_file)
+        .env("VOXKEY_ASR_HOST", "127.0.0.1")
+        .env("VOXKEY_ASR_PORT", "17863")
+        .env("PYTHONUNBUFFERED", "1")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("failed to start ASR service: {e}"))?;
+    *state.child.lock().unwrap() = Some(child);
+    Ok(())
+}
+
+#[tauri::command]
+fn stop_asr_service(state: tauri::State<ServiceState>) -> Result<(), String> {
+    let mut guard = state.child.lock().unwrap();
+    if let Some(mut child) = guard.take() {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
+    Ok(())
+}
+
+/// Trigger an on-demand download of the (large) ASR model weights from the
+/// published release assets. The bundle ships `ensure_funasr.py` /
+/// `ensure_qwen3.py` next to `service.py`, so we run the bundled Python to pull
+/// the weights into `models/` inside the bundle directory. This is what makes
+/// the DMG self-contained without embedding gigabytes of weights: the app
+/// fetches them on first launch instead.
+///
+/// Returns `Ok(())` once the download has been *spawned* (it runs detached on a
+/// helper thread; the UI polls `GET /engines` or `model_status` to learn when
+/// the weights are ready). Errors here surface failures to even launch the
+/// downloader (missing script / python), not download progress.
+#[tauri::command]
+fn start_model_download(app: tauri::AppHandle) -> Result<(), String> {
+    let base = asr_bundle_dir(&app).ok_or("could not locate the ASR service bundle")?;
+    let python = asr_python_exe(&app);
+
+    // The two downloaders are siblings of service.py inside the bundle.
+    let ensure_funasr = base.join("ensure_funasr.py");
+    let ensure_qwen3 = base.join("ensure_qwen3.py");
+    if !ensure_funasr.exists() || !ensure_qwen3.exists() {
+        return Err(
+            "model downloaders (ensure_funasr.py / ensure_qwen3.py) are missing from the bundle"
+                .into(),
+        );
+    }
+
+    // Run both downloaders. Each is idempotent (skips files already present) and
+    // verifies SHA-256 against the committed manifest before use, so re-running
+    // is safe. A failure in one engine's download is logged but does not block
+    // the other; the spawned process exits non-zero on total failure.
+    let mut cmd = Command::new(python);
+    cmd.current_dir(&base)
+        .env("PYTHONUNBUFFERED", "1")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    // Run both downloaders. Each is idempotent (skips files already present) and
+    // verifies SHA-256 against the committed manifest before use. We pass
+    // `--no-convert` to ensure_funasr so a failed release download fails loudly
+    // instead of attempting a heavy local torch conversion on the user's Mac
+    // (the design is: weights always come from the published release).
+    // ensure_*.py default `--out` already points at models/funasr_coreml and
+    // models/qwen3_asr relative to CWD (the bundle dir), so CWD is enough.
+    let b = base.to_string_lossy().into_owned();
+    let f = ensure_funasr.to_string_lossy().into_owned();
+    let q = ensure_qwen3.to_string_lossy().into_owned();
+    let script = format!(
+        "import sys, runpy\n\
+         sys.path.insert(0, {base})\n\
+         sys.argv = [{funasr}, '--no-convert']\n\
+         runpy.run_path({funasr}, run_name='__main__', alter_sys=True)\n\
+         sys.argv = [{qwen3}]\n\
+         runpy.run_path({qwen3}, run_name='__main__', alter_sys=True)",
+        base = sh_quote(&b),
+        funasr = sh_quote(&f),
+        qwen3 = sh_quote(&q),
+    );
+    cmd.arg("-c").arg(script);
+
+    let child = cmd
+        .spawn()
+        .map_err(|e| format!("failed to start model download: {e}"))?;
+    // Detach: we don't need the handle. Leak it into the OS (reaped on exit).
+    let _ = child.id();
+    std::mem::forget(child);
+    Ok(())
+}
+
+/// Minimal single-quote shell escaping for embedding paths into a `python -c`
+/// string. Bundle paths are controlled (our own python + our own scripts), so a
+/// simple quote-escaping is sufficient and avoids spawning a shell.
+fn sh_quote(s: &str) -> String {
+    let escaped = s.replace('\\', "\\\\").replace('\'', "\\'");
+    format!("'{}'", escaped)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(ServiceState {
+            child: Mutex::new(None),
+        })
         .invoke_handler(tauri::generate_handler![
             list_runtime_candidates,
             load_settings,
@@ -343,7 +553,11 @@ pub fn run() {
             save_asr_settings,
             get_asr_service_status,
             model_status,
-            get_asr_token
+            get_asr_token,
+            start_asr_service,
+            stop_asr_service,
+            start_model_download,
+            get_licenses
         ])
         .run(tauri::generate_context!())
         .expect("failed to run VoxKey desktop shell");

@@ -1,16 +1,17 @@
 import type { ReactNode } from "react";
-import { HardDriveDownload, Mic, MonitorCog, RadioTower } from "lucide-react";
+import { HardDriveDownload, Mic, MonitorCog, RadioTower, ScrollText } from "lucide-react";
 import { useI18n } from "../i18n";
 import styles from "./Sidebar.module.css";
 
-export type PageId = "setup" | "models" | "capture" | "service";
+export type PageId = "setup" | "models" | "capture" | "service" | "about";
 
-const NAV: { id: PageId; labelKey: "nav.setup" | "nav.models" | "nav.capture" | "nav.service"; icon: ReactNode }[] =
+const NAV: { id: PageId; labelKey: "nav.setup" | "nav.models" | "nav.capture" | "nav.service" | "nav.about"; icon: ReactNode }[] =
   [
     { id: "setup", labelKey: "nav.setup", icon: <MonitorCog size={18} /> },
     { id: "models", labelKey: "nav.models", icon: <HardDriveDownload size={18} /> },
     { id: "capture", labelKey: "nav.capture", icon: <Mic size={18} /> },
     { id: "service", labelKey: "nav.service", icon: <RadioTower size={18} /> },
+    { id: "about", labelKey: "nav.about", icon: <ScrollText size={18} /> },
   ];
 
 export function Sidebar({

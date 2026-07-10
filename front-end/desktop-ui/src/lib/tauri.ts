@@ -111,3 +111,26 @@ export async function getAsrToken(): Promise<string> {
 export async function modelStatus(): Promise<EngineInfo[]> {
   return invoke<EngineInfo[]>("model_status");
 }
+
+/** Launch the bundled local ASR service (spawns the Python process). */
+export async function startAsrService(): Promise<void> {
+  return invoke<void>("start_asr_service");
+}
+
+/** Stop the local ASR service spawned by `start_asr_service`. */
+export async function stopAsrService(): Promise<void> {
+  return invoke<void>("stop_asr_service");
+}
+
+/** Trigger an on-demand download of the ASR model weights from the published
+ * release assets (runs the bundled `ensure_*.py` downloaders). The UI should
+ * then poll `model_status` to learn when the weights are ready. */
+export async function startModelDownload(): Promise<void> {
+  return invoke<void>("start_model_download");
+}
+
+/** Read the bundled third-party license / attribution text (shown in the
+ * Licenses view). */
+export async function getLicenses(): Promise<string> {
+  return invoke<string>("get_licenses");
+}

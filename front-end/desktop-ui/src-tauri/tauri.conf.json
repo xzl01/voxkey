@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "pnpm web:dev",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "bash scripts/before-build.sh",
     "frontendDist": "../dist"
   },
   "app": {
@@ -26,6 +26,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all"
+    "targets": "all",
+    "resources": ["asr"],
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "infoPlist": "Info.plist",
+      "entitlements": "entitlements.plist"
+    }
   }
 }

@@ -1,0 +1,123 @@
+name: Publish ASR model weights
+
+# Build / fetch the (large) ASR model weights and publish them as GitHub Release
+# assets so the desktop app can download them on first launch (they are NOT
+# embedded in the DMG). The release tag is `voxkey-models-v1`; the app's
+# `ensure_funasr.py` / `ensure_qwen3.py` download from exactly this release and
+# verify SHA-256 against the committed manifests.
+#
+#   * FunASR (NCE/ANE): converted locally from iic/SenseVoiceSmall via
+#     convert_funasr_coreml.py, packaged as funasr_coreml.tar.gz.
+#   * Qwen3-ASR (GPU/Metal): downloaded from upstream, re-published here.
+#
+# Trigger manually (workflow_dispatch) or by pushing a `voxkey-models-v*` tag.
+# The committed manifests/ SHA-256 files are refreshed so the next DMG build
+# bundles matching verification hashes.
+
+on:
+  push:
+    tags:
+      - "voxkey-models-v*"
+  workflow_dispatch:
+    inputs:
+      funasr_model:
+        description: "FunASR model id to convert (SenseVoice)"
+        required: false
+        default: "iic/SenseVoiceSmall"
+      funasr_quantize:
+        description: "FunASR ONNX quantization"
+        required: false
+        default: "int8"
+
+permissions:
+  contents: write # create the release + commit updated manifests
+
+jobs:
+  publish:
+    name: Build & publish weights
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (main)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install conversion deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r back-end/platforms/macos/requirements.txt
+          pip install -r back-end/platforms/macos/requirements-convert.txt
+
+      - name: Convert FunASR -> Core ML package
+        run: |
+          python back-end/platforms/macos/convert_funasr_coreml.py \
+            --model "${{ github.event.inputs.funasr_model || 'iic/SenseVoiceSmall' }}" \
+            --out back-end/platforms/macos/models/funasr_coreml \
+            --quantize "${{ github.event.inputs.funasr_quantize || 'int8' }}"
+          tar -czf funasr_coreml.tar.gz -C back-end/platforms/macos/models funasr_coreml
+
+      - name: Fetch Qwen3-ASR GGUF
+        run: |
+          python back-end/platforms/macos/ensure_qwen3.py \
+            --out back-end/platforms/macos/models/qwen3_asr
+
+      - name: Write SHA-256 manifests
+        run: |
+          python - <<'PY'
+          import hashlib, json, pathlib
+
+          def sha256_of(p: pathlib.Path) -> str:
+              h = hashlib.sha256()
+              with open(p, "rb") as f:
+                  for chunk in iter(lambda: f.read(1 << 20), b""):
+                      h.update(chunk)
+              return h.hexdigest()
+
+          arc = pathlib.Path("funasr_coreml.tar.gz")
+          manifest_dir = pathlib.Path("back-end/platforms/macos/manifests")
+          manifest_dir.mkdir(parents=True, exist_ok=True)
+          manifest_dir.joinpath("funasr_coreml.json").write_text(
+              json.dumps({"sha256": sha256_of(arc)}, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+
+          base = pathlib.Path("back-end/platforms/macos/models/qwen3_asr")
+          files = [
+              "qwen3_asr_encoder_frontend.int4.onnx",
+              "qwen3_asr_encoder_backend.int4.onnx",
+              "qwen3_asr_llm.q4_k.gguf",
+          ]
+          qwen = {f: sha256_of(base / f) for f in files}
+          manifest_dir.joinpath("qwen3_asr.json").write_text(
+              json.dumps(qwen, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+          )
+          print("wrote manifests:", manifest_dir)
+          PY
+
+      - name: Commit updated manifests
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add back-end/platforms/macos/manifests
+          git diff --cached --quiet || git commit -m "chore: refresh model SHA-256 manifests"
+          git push
+
+      - name: Publish release + assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: voxkey-models-v1
+          name: voxkey-models-v1
+          generate_release_notes: true
+          files: |
+            funasr_coreml.tar.gz
+            back-end/platforms/macos/models/qwen3_asr/qwen3_asr_encoder_frontend.int4.onnx
+            back-end/platforms/macos/models/qwen3_asr/qwen3_asr_encoder_backend.int4.onnx
+            back-end/platforms/macos/models/qwen3_asr/qwen3_asr_llm.q4_k.gguf
+            back-end/platforms/macos/manifests/funasr_coreml.json
+            back-end/platforms/macos/manifests/qwen3_asr.json

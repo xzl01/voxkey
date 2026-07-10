@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-stop-asr-service"
+description = "Enables the stop_asr_service command without any pre-configured scope."
+commands.allow = ["stop_asr_service"]
+
+[[permission]]
+identifier = "deny-stop-asr-service"
+description = "Denies the stop_asr_service command without any pre-configured scope."
+commands.deny = ["stop_asr_service"]

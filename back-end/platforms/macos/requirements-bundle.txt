@@ -1,0 +1,45 @@
+# SPDX-FileCopyrightText: 2026 HarryLoong
+# SPDX-License-Identifier: MIT
+#
+# Runtime dependencies for the *bundled* macOS ASR service.
+#
+# This file is what front-end/desktop-ui/scripts/bundle_asr.sh installs into the
+# relocatable Python that ships inside the .app (Resources/asr/python). It is a
+# strict subset of requirements.txt: only packages that `pip` can install and
+# that the service actually imports at runtime.
+#
+# What is deliberately EXCLUDED and why:
+#   * qwen-asr-gguf      -> VENDORED. qwen3_gpu.py loads `qwen_asr_gguf` from the
+#                           `asr_project_dir` project subtree (config.json) at
+#                           runtime; it is not published on PyPI and must never be
+#                           pip-installed (it would 404 and abort `tauri build`).
+#   * coremltools, onnx  -> conversion-only (convert_funasr_coreml.py). The NCE
+#                           path runs the pre-exported ONNX via ONNX Runtime's
+#                           Core ML EP, so these are not needed at service runtime.
+#   * psutil             -> optional diagnostics, not on the request path.
+#   * scipy              -> pulled in transitively by funasr; not imported directly.
+#
+# See back-end/platforms/macos/README.md ("环境配置与依赖") for the full picture.
+
+# --- service / api ---------------------------------------------------------
+numpy>=1.26
+soundfile>=0.12            # writes 16k mono wav for the Qwen3 LLM backend
+fastapi>=0.110
+uvicorn[standard]>=0.29    # ASGI server for /transcribe and /transcribe/stream
+pydantic>=2.6
+python-multipart>=0.0.9
+
+# --- FunASR Core ML (NCE) runtime -----------------------------------------
+# ONNX Runtime's Core ML EP dispatches the SenseVoice encoder onto the ANE.
+onnxruntime>=1.18
+# FunASR's WavFrontend + torch feature extraction run at engine-load time.
+funasr>=1.0
+torch>=2.1
+sentencepiece>=0.1.99
+
+# --- Qwen3-ASR GPU runtime (llama.cpp Metal) ------------------------------
+# `qwen_asr_gguf` itself is vendored (loaded from asr_project_dir); these are
+# its pip-installable backing libraries. llama-cpp-python needs the Metal
+# backend, which bundle_asr.sh enables via CMAKE_ARGS when building from source.
+llama-cpp-python>=0.3
+gguf>=0.1

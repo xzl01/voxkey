@@ -7,9 +7,10 @@
 # What this does:
 #   1. Install Homebrew system deps (ffmpeg, python, portaudio, rust).
 #   2. Create a Python venv and install macOS ASR requirements.
-#   3. Ensure the FunASR Core ML (NCE) model. Prefers a one-shot download of the
+#   3. Compile the Swift microphone / global-hotkey helpers.
+#   4. Ensure the FunASR Core ML (NCE) model. Prefers a one-shot download of the
 #      pre-converted package; falls back to a local torch export if offline.
-#   4. Download the Qwen3-ASR GGUF (GPU) weights from HuggingFace (with an
+#   5. Download the Qwen3-ASR GGUF (GPU) weights from HuggingFace (with an
 #      hf-mirror.com fallback) -- no manual URL needed.
 #
 # Run from the repo root:
@@ -43,7 +44,17 @@ source "$VENV/bin/activate"
 python -m pip install --upgrade pip
 pip install -r "$MACOS_DIR/requirements.txt"
 
-# 3. FunASR -> Core ML (NCE) --------------------------------------------------
+# 3. native helpers -----------------------------------------------------------
+if ! command -v swiftc >/dev/null 2>&1; then
+  echo "!! swiftc not found. Install Xcode Command Line Tools and re-run." >&2
+  exit 1
+fi
+echo "==> Compiling Swift microphone and hotkey helpers"
+swiftc -O "$MACOS_DIR/capture_helper.swift" -o "$MACOS_DIR/capture_helper"
+swiftc -O "$MACOS_DIR/hotkey_helper.swift" -o "$MACOS_DIR/hotkey_helper"
+chmod 0755 "$MACOS_DIR/capture_helper" "$MACOS_DIR/hotkey_helper"
+
+# 4. FunASR -> Core ML (NCE) --------------------------------------------------
 # Prefer the pre-converted package (one download, no torch needed); fall back
 # to a local torch export if the package source is unavailable.
 MODEL_FAIL=0
@@ -63,7 +74,7 @@ if [[ "${SKIP_FUNASR_CONVERT:-0}" != "1" ]]; then
   fi
 fi
 
-# 4. Qwen3-ASR GGUF (GPU) -----------------------------------------------------
+# 5. Qwen3-ASR GGUF (GPU) -----------------------------------------------------
 # Downloaded from HuggingFace (with hf-mirror.com fallback) -- no manual URL.
 if [[ "${SKIP_QWEN_DOWNLOAD:-0}" != "1" ]]; then
   echo "==> Ensuring Qwen3-ASR GGUF is present"

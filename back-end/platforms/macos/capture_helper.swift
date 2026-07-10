@@ -69,8 +69,6 @@ guard let format = AVAudioFormat(standardFormatWithSampleRate: rate, channels: c
     exit(1)
 }
 
-FileHandle.standardOutput.write(wavHeader(rate: rate, channels: channels))
-
 input.installTap(onBus: 0, bufferSize: 4096, format: format) { buffer, _ in
     guard let floatData = buffer.floatChannelData else { return }
     let frameCount = Int(buffer.frameLength)
@@ -89,6 +87,11 @@ do {
     fputs("AVAudioEngine start failed: \(error)\n", stderr)
     exit(1)
 }
+
+// Readiness handshake for the Python parent. Emit the stream header only after
+// AVAudioEngine actually starts, so permission/device failures surface as
+// startup errors instead of looking like a successful empty recording.
+FileHandle.standardOutput.write(wavHeader(rate: rate, channels: channels))
 
 // Keep the process alive until terminated (SIGTERM) by the parent.
 RunLoop.main.run()

@@ -9,15 +9,17 @@ const SetupPage = lazy(() => import("./pages/SetupPage").then((m) => ({ default:
 const ModelsPage = lazy(() => import("./pages/ModelsPage").then((m) => ({ default: m.ModelsPage })));
 const CapturePage = lazy(() => import("./pages/CapturePage").then((m) => ({ default: m.CapturePage })));
 const ServicePage = lazy(() => import("./pages/ServicePage").then((m) => ({ default: m.ServicePage })));
+const AboutPage = lazy(() => import("./pages/AboutPage").then((m) => ({ default: m.AboutPage })));
 
 const PAGE_META: Record<
   PageId,
-  { title: "setup.title" | "models.title" | "capture.title" | "service.title"; subtitle: "setup.subtitle" | "models.subtitle" | "capture.subtitle" | "service.subtitle" }
+  { title: "setup.title" | "models.title" | "capture.title" | "service.title" | "about.title"; subtitle: "setup.subtitle" | "models.subtitle" | "capture.subtitle" | "service.subtitle" | "about.subtitle" }
 > = {
   setup: { title: "setup.title", subtitle: "setup.subtitle" },
   models: { title: "models.title", subtitle: "models.subtitle" },
   capture: { title: "capture.title", subtitle: "capture.subtitle" },
   service: { title: "service.title", subtitle: "service.subtitle" },
+  about: { title: "about.title", subtitle: "about.subtitle" },
 };
 
 function PageSkeleton() {
@@ -45,6 +47,7 @@ export function App() {
           {page === "models" && <ModelsPage />}
           {page === "capture" && <CapturePage />}
           {page === "service" && <ServicePage />}
+          {page === "about" && <AboutPage />}
         </Suspense>
       </main>
     </div>

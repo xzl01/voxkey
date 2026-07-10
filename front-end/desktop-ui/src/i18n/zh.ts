@@ -7,6 +7,7 @@ export const zh: Dictionary = {
   "nav.models": "模型",
   "nav.capture": "转写",
   "nav.service": "服务",
+  "nav.about": "许可",
 
   "topbar.toggleTheme": "切换主题",
   "topbar.toggleLang": "切换语言",
@@ -116,9 +117,19 @@ export const zh: Dictionary = {
   "service.noHealth": "无可用健康检查",
   "service.maskedKey": "API Key",
   "service.detail": "详情",
+  "service.start": "启动",
+  "service.stop": "停止",
+  "service.starting": "启动中",
+  "service.downloadModels": "下载模型",
+  "service.downloading": "下载中…",
+  "service.modelsMissingNote": "模型权重在首次启动后下载。点击「下载模型」从 Release 获取权重文件。",
 
   // 通用
   "common.online": "在线",
+  "about.title": "第三方许可与署名",
+  "about.subtitle": "本产品所包含或下载的第三方组件及其许可。",
+  "about.intro": "本应用包含 FunASR（Apache 2.0）、SenseVoiceSmall 模型权重（FunASR 模型开源协议 v1.1）、Qwen3-ASR 权重（Apache 2.0）与 llama.cpp（MIT）。模型权重在首次启动后从 GitHub Release 下载。",
+  "about.loading": "加载许可信息…",
   "common.offline": "离线",
   "common.loading": "加载中",
   "common.reloading": "刷新中",
@@ -136,4 +147,8 @@ export const zh: Dictionary = {
   "toast.modelSwitchFailed": "无法切换引擎。",
   "toast.transcribeDone": "转写完成。",
   "toast.transcribeFailed": "转写失败。",
+  "toast.serviceStartFailed": "无法启动本地服务。",
+  "toast.serviceStopFailed": "无法停止本地服务。",
+  "toast.modelDownloadStarted": "开始下载模型权重，请稍候…",
+  "toast.modelDownloadFailed": "无法启动模型下载。",
 };

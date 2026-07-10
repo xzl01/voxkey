@@ -11,6 +11,8 @@
     "allow-save-asr-settings",
     "allow-get-asr-service-status",
     "allow-model-status",
-    "allow-get-asr-token"
+    "allow-get-asr-token",
+    "allow-start-asr-service",
+    "allow-stop-asr-service"
   ]
 }

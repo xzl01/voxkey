@@ -5,6 +5,7 @@ export const en = {
   "nav.models": "Models",
   "nav.capture": "Capture",
   "nav.service": "Service",
+  "nav.about": "Licenses",
 
   "topbar.toggleTheme": "Toggle theme",
   "topbar.toggleLang": "Switch language",
@@ -114,9 +115,19 @@ export const en = {
   "service.noHealth": "No health check available",
   "service.maskedKey": "API key",
   "service.detail": "Detail",
+  "service.start": "Start",
+  "service.stop": "Stop",
+  "service.starting": "Starting",
+  "service.downloadModels": "Download models",
+  "service.downloading": "Downloading…",
+  "service.modelsMissingNote": "Model weights are downloaded on first launch. Click Download to fetch them from the release.",
 
   // Common
   "common.online": "Online",
+  "about.title": "Third-Party Licenses",
+  "about.subtitle": "Licenses for the third-party components bundled or downloaded by this app.",
+  "about.intro": "This app includes FunASR (Apache 2.0), SenseVoiceSmall model weights (FunASR Model Open Source License v1.1), Qwen3-ASR weights (Apache 2.0) and llama.cpp (MIT). Model weights are downloaded from the GitHub Release on first launch.",
+  "about.loading": "Loading license info…",
   "common.offline": "Offline",
   "common.loading": "Loading",
   "common.reloading": "Reloading",
@@ -134,6 +145,10 @@ export const en = {
   "toast.modelSwitchFailed": "Could not switch engine.",
   "toast.transcribeDone": "Transcription complete.",
   "toast.transcribeFailed": "Transcription failed.",
+  "toast.serviceStartFailed": "Could not start the local service.",
+  "toast.serviceStopFailed": "Could not stop the local service.",
+  "toast.modelDownloadStarted": "Started downloading model weights, please wait…",
+  "toast.modelDownloadFailed": "Could not start the model download.",
 };
 
 export type Dictionary = typeof en;

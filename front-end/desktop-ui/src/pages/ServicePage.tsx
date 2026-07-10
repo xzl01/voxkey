@@ -1,20 +1,30 @@
 import { useCallback, useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { Download, Play, RefreshCw, Square } from "lucide-react";
 import { Button } from "../components/Button";
 import { Panel } from "../components/Panel";
 import { StatusPill } from "../components/StatusPill";
 import { useI18n } from "../i18n";
 import { useSettings } from "../hooks/useSettings";
 import { useServiceStatus } from "../hooks/useServiceStatus";
+import { useToast } from "../hooks/useToast";
 import { getHealth, type HealthResponse } from "../lib/api";
+import { startAsrService, stopAsrService, startModelDownload, modelStatus, type EngineInfo } from "../lib/tauri";
 import styles from "./ServicePage.module.css";
 
 export function ServicePage() {
   const { t } = useI18n();
   const { settings } = useSettings();
+  const { showToast } = useToast();
   const isRemote = settings.asr_backend === "http";
   const local = useServiceStatus(!isRemote);
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [models, setModels] = useState<EngineInfo[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+
+  // True when at least one configured engine has no model weights present yet
+  // (the weights are fetched from the release on first launch, not bundled).
+  const modelsMissing = models.some((m) => !m.present);
 
   const refreshAll = useCallback(async () => {
     if (isRemote) return;
@@ -24,11 +34,63 @@ export function ServicePage() {
     } catch {
       setHealth(null);
     }
+    try {
+      setModels(await modelStatus());
+    } catch {
+      setModels([]);
+    }
   }, [isRemote, local, settings.asr_service_url]);
 
   useEffect(() => {
     if (!isRemote) refreshAll();
   }, [isRemote, refreshAll]);
+
+  const handleStart = async () => {
+    setBusy(true);
+    try {
+      await startAsrService();
+    } catch (err) {
+      console.error(err);
+      showToast(t("toast.serviceStartFailed"), "error");
+    } finally {
+      setBusy(false);
+      await refreshAll();
+    }
+  };
+
+  const handleStop = async () => {
+    setBusy(true);
+    try {
+      await stopAsrService();
+    } catch (err) {
+      console.error(err);
+      showToast(t("toast.serviceStopFailed"), "error");
+    } finally {
+      setBusy(false);
+      await refreshAll();
+    }
+  };
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      await startModelDownload();
+      showToast(t("toast.modelDownloadStarted"), "info");
+    } catch (err) {
+      console.error(err);
+      showToast(t("toast.modelDownloadFailed"), "error");
+    } finally {
+      setDownloading(false);
+      // Poll for a short while so the UI reflects progress without a manual refresh.
+      let ticks = 0;
+      const timer = setInterval(async () => {
+        await refreshAll();
+        if (++ticks >= 20) {
+          clearInterval(timer);
+        }
+      }, 4000);
+    }
+  };
 
   const statusTone = local.state === "loading" ? "loading" : local.status?.reachable ? "online" : "error";
 
@@ -58,6 +120,32 @@ export function ServicePage() {
           </div>
         ) : (
           <>
+            <div className={styles.controls}>
+              <Button
+                variant="primary"
+                onClick={handleStart}
+                disabled={busy || local.status?.reachable}
+              >
+                <Play size={16} /> {busy && !local.status?.reachable ? t("service.starting") : t("service.start")}
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={handleStop}
+                disabled={busy || !local.status?.reachable}
+              >
+                <Square size={16} /> {t("service.stop")}
+              </Button>
+              {modelsMissing && (
+                <Button
+                  variant="subtle"
+                  onClick={handleDownload}
+                  disabled={downloading}
+                >
+                  <Download size={16} /> {downloading ? t("service.downloading") : t("service.downloadModels")}
+                </Button>
+              )}
+            </div>
+
             <dl className={styles.infoList}>
               <div>
                 <dt>{t("service.address")}</dt>

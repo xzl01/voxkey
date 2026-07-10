@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import difflib
 import logging
+import math
 import threading
 import time
 from dataclasses import dataclass
@@ -92,6 +93,13 @@ class DualEngineOrchestrator:
         results: dict[EngineKind, Transcript] = {}
         lock = threading.Lock()
 
+        def _timeout_for(engine) -> float:
+            try:
+                value = float(getattr(engine, "timeout_s", 30.0))
+            except (TypeError, ValueError):
+                return 30.0
+            return value if math.isfinite(value) and value > 0 else 30.0
+
         # Skip engines that are disabled (None). Spawning a worker for a None
         # engine would raise inside the background thread and only surface as a
         # swallowed error, so guard here instead.
@@ -114,7 +122,11 @@ class DualEngineOrchestrator:
 
         def _run(engine, key):
             try:
-                tr = engine.transcribe(waveform, language=language)
+                tr = engine.transcribe(
+                    waveform,
+                    language=language,
+                    timeout_s=_timeout_for(engine),
+                )
             except Exception as exc:  # noqa: BLE001
                 # A real inference error must surface as a failed Transcript,
                 # not a swallowed thread traceback that later yields empty text
@@ -128,28 +140,42 @@ class DualEngineOrchestrator:
                     ok=False,
                     error=f"{type(exc).__name__}: {exc}",
                 )
+            accepted = False
             with lock:
-                results[key] = tr
-            if on_partial is not None:
+                # The coordinator may already have recorded a timeout for this
+                # daemon worker. Do not overwrite that bounded result if the
+                # underlying native call eventually returns late.
+                if key not in results:
+                    results[key] = tr
+                    accepted = True
+            if accepted and on_partial is not None:
                 on_partial(tr)
 
-        threads = []
+        workers = []
         for engine, key in engines:
             th = threading.Thread(target=_run, args=(engine, key), daemon=True)
-            threads.append(th)
+            workers.append((th, engine, key))
             th.start()
 
-        # For fast_first we resolve as soon as the NCE engine returns; we still
-        # wait for the GPU engine in the background for the refined pass.
-        for th in threads:
-            th.join(timeout=self.funasr.timeout_s if self.funasr else 30)
-            with lock:
-                if EngineKind.FUNASR_NCE in results:
-                    break
-
-        # Wait out the GPU engine if it hasn't finished yet (it usually hasn't).
-        for th in threads:
-            th.join()
+        # Each native engine gets its own hard response deadline, measured from
+        # the common start time. The native thread is daemonised and may finish
+        # later, but the HTTP/SSE request never waits past the configured bound.
+        # `_LockedEngine` also bounds lock acquisition, preventing timed-out
+        # requests from accumulating an unbounded queue of stale inference work.
+        for th, engine, key in workers:
+            timeout_s = _timeout_for(engine)
+            remaining = max(0.0, t0 + timeout_s - time.perf_counter())
+            th.join(timeout=remaining)
+            if th.is_alive():
+                timed_out = Transcript(
+                    text="",
+                    engine=key,
+                    latency_s=timeout_s,
+                    ok=False,
+                    error=f"timeout after {timeout_s:.1f}s",
+                )
+                with lock:
+                    results.setdefault(key, timed_out)
 
         with lock:
             fa = results.get(EngineKind.FUNASR_NCE)
