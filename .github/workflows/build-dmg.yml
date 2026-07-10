@@ -1,0 +1,97 @@
+name: Build macOS DMG (Apple Silicon)
+
+# Build a distributable DMG for M-series (Apple Silicon) Macs.
+#
+# Triggers:
+#   * push of a tag like `v1.2.3`  -> builds, then attaches the DMG to a GitHub Release
+#   * manual `workflow_dispatch`   -> builds and uploads the DMG as a workflow artifact
+#
+# The runner is `macos-14`, which is ARM64, so `tauri build` produces a native
+# arm64 app + DMG (exactly what M1/M2/M3/M4 Macs need).
+#
+# Signing & notarization (optional, recommended for distribution):
+#   Add these repository *Secrets* and the DMG will be Developer-ID signed and
+#   notarized automatically by Tauri; without them the build still succeeds but
+#   yields an *unsigned* DMG (Gatekeeper will ask the user to right-click ->
+#   Open, or run `xattr -cr` on the app).
+#     APPLE_CERTIFICATE        base64 of your .p12 signing identity export
+#     APPLE_CERTIFICATE_PASSWORD
+#     APPLE_SIGNING_IDENTITY   e.g. "Developer ID Application: Your Name (TEAMID)"
+#     APPLE_ID                 your Apple ID email
+#     APPLE_PASSWORD           app-specific password
+#     APPLE_TEAM_ID
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to create a Release + upload the DMG asset
+
+jobs:
+  build-dmg:
+    name: Build DMG (arm64)
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: front-end/desktop-ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            front-end/desktop-ui/src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build DMG
+        env:
+          # Only used when the secrets above are configured; harmless otherwise.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: pnpm tauri build
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jianting-input-macos-arm64-dmg
+          path: front-end/desktop-ui/src-tauri/target/release/bundle/dmg/*.dmg
+          if-no-files-found: error
+
+      - name: Create GitHub Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: front-end/desktop-ui/src-tauri/target/release/bundle/dmg/*.dmg
+          generate_release_notes: true
