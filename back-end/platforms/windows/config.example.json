@@ -1,0 +1,56 @@
+{
+  "trigger": {
+    "enabled": false,
+    "backend": "win32",
+    "key": "right_shift",
+    "name": "voice input key",
+    "mode": "hold"
+  },
+  "recordings_dir": "%LOCALAPPDATA%\\voxkey\\recordings",
+  "asr_project_dir": "qwen-asr",
+  "model_dir": "models",
+  "python_venv": null,
+  "language": "Chinese",
+  "min_record_seconds": 0.25,
+  "capture": {
+    "rate": 16000,
+    "channels": 1,
+    "format": "s16",
+    "device": null,
+    "vad": false
+  },
+  "type_text": true,
+  "copy_to_clipboard": true,
+  "notify": true,
+  "strip_trailing_punctuation": false,
+  "asr_backend": "http",
+  "asr_service_url": "http://127.0.0.1:17863",
+  "asr_fallback_local": true,
+  "asr_http_timeout": 30,
+  "selected_runtime_id": "gpu-directml",
+  "ui_settings_path": null,
+  "engines": {
+    "qwen3_gpu": {
+      "enabled": true,
+      "model_dir": "models/qwen3_asr",
+      "onnx_provider": "Dml",
+      "llm_use_gpu": true,
+      "llm_fn": "qwen3_asr_llm.q4_k_m.gguf",
+      "encoder_frontend_fn": "qwen3_asr_encoder_frontend.int4.onnx",
+      "encoder_backend_fn": "qwen3_asr_encoder_backend.int4.onnx",
+      "enable_aligner": false,
+      "timeout_s": 20.0
+    },
+    "funasr_directml": {
+      "enabled": true,
+      "model_path": "models/funasr_directml",
+      "compute_units": "dml",
+      "timeout_s": 8.0
+    }
+  },
+  "fusion": {
+    "mode": "fast_first",
+    "funasr_priority_until_s": 1.2,
+    "min_agreement_chars": 4
+  }
+}

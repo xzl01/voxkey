@@ -1,0 +1,127 @@
+name: Build Windows installer
+
+# Build a self-contained Windows installer (.msi + -setup.exe) for the VoxKey
+# desktop app, bundling the local dual-engine ASR backend (Qwen3-ASR Vulkan +
+# FunASR DirectML) so it runs without a system Python.
+#
+# Triggers:
+#   * push of a tag like `v1.2.3`  -> builds, then attaches the artifacts to a
+#     GitHub Release
+#   * push to main / pull_request  -> builds and uploads the artifacts so
+#     Windows regressions are caught in CI (compiles the Tauri app + bundles the
+#     Python backend)
+#   * manual `workflow_dispatch`   -> builds and uploads the artifacts
+#
+# Signing (optional, recommended for distribution): set these repository
+# *Secrets* and Tauri will sign the binaries/installer automatically:
+#     WINDOWS_CERTIFICATE        base64 of your .pfx signing identity export
+#     WINDOWS_CERTIFICATE_PASSWORD
+# Without them the build still succeeds but yields an *unsigned* installer
+# (SmartScreen will warn on first run).
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - "v[0-9]*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write # needed to create a Release + upload assets on tag
+
+jobs:
+  build-msi:
+    name: Build Windows installer (x64)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: front-end/desktop-ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add Git bash to PATH
+        # Tauri's beforeBuildCommand invokes `bash scripts/before-build.sh`; ensure
+        # `bash` resolves under `cmd /C` on the Windows runner.
+        run: echo "C:\Program Files\Git\bin" | Out-File -Append -FilePath $env:GITHUB_PATH -Encoding utf8
+
+      - name: Install Windows bundling tools (WiX + NSIS)
+        # Tauri auto-downloads these but the download can fail on flaky network;
+        # installing them makes the build deterministic.
+        run: |
+          choco install wixtoolset nsis -y --no-progress
+          echo "C:\Program Files (x86)\WiX Toolset v3.11\bin" | Out-File -Append -FilePath $env:GITHUB_PATH -Encoding utf8
+          echo "C:\Program Files (x86)\NSIS" | Out-File -Append -FilePath $env:GITHUB_PATH -Encoding utf8
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            front-end/desktop-ui/src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Point WiX locale to an absolute runner path
+        # Tauri passes localePath verbatim as `-loc` to candle/light, which run
+        # from a CWD where the committed repo-relative path does not resolve
+        # (os error 3). Rewrite it to an absolute path on the runner.
+        run: |
+          $cfg = "front-end/desktop-ui/src-tauri/tauri.conf.json"
+          # Forward slashes: backslashes are JSON escape chars (would break the
+          # config) and candle/light accept forward slashes on Windows.
+          $abs = "$env:GITHUB_WORKSPACE/front-end/desktop-ui/src-tauri/wix-locale.wxl" -replace '\\', '/'
+          # WriteAllText keeps UTF-8 (no BOM); Set-Content's default ANSI codepage
+          # would corrupt the Chinese productName on the en-US runner.
+          $text = [System.IO.File]::ReadAllText($cfg)
+          [System.IO.File]::WriteAllText($cfg, $text.Replace('src-tauri/wix-locale.wxl', $abs))
+
+      - name: Build Windows installer
+        # beforeBuildCommand (bash scripts/before-build.sh) builds the frontend
+        # and bundles the Windows ASR backend (portable Python + requirements +
+        # llama.cpp Vulkan DLLs) into src-tauri/asr. BUNDLE_PYTHON=1 makes the
+        # installer self-contained (no system Python needed).
+        env:
+          BUNDLE_PYTHON: "1"
+          # Only used when the secrets above are configured; harmless otherwise.
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: pnpm tauri build
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: jianting-input-windows-x64
+          path: |
+            front-end/desktop-ui/src-tauri/target/release/bundle/wix/*.msi
+            front-end/desktop-ui/src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: warn
+
+      - name: Create GitHub Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            front-end/desktop-ui/src-tauri/target/release/bundle/wix/*.msi
+            front-end/desktop-ui/src-tauri/target/release/bundle/nsis/*-setup.exe
+          generate_release_notes: true

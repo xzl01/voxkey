@@ -21,6 +21,29 @@
   font-size: var(--text-sm);
 }
 
+.warningBanner {
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-warning, var(--border-default));
+  border-radius: var(--radius-sm);
+  background: var(--color-warning-soft, #fff7e6);
+  color: var(--color-warning-text, #8a5800);
+  font-size: var(--text-sm);
+}
+
+.warningTitle {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-weight: 600;
+}
+
+.warningList {
+  margin: 0;
+  padding-left: var(--space-4);
+  display: grid;
+  gap: var(--space-1);
+}
+
 .cardGrid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

@@ -71,6 +71,7 @@ export const en = {
   "models.reload": "Reload status",
   "models.localOnly": "Switch to Local models in Setup to change engines.",
   "models.statusTitle": "Engine status",
+  "models.performanceWarningTitle": "Performance note",
 
   // Capture
   "capture.title": "Capture",

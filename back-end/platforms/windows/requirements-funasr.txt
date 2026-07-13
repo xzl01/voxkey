@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: MIT
+# Heavy FunASR / torch stack, installed on first use by
+# funasr_directml._ensure_funasr_stack(). This is intentionally NOT bundled into
+# the installer so the Windows MSI/NSIS stays small (~1 GB saved).
+#
+# torch resolves to the CPU-only wheel via the extra index; funasr and its
+# transitive deps (transformers, modelscope, jieba, sklearn, scipy, sympy,
+# llvmlite, numba ...) come from PyPI.
+funasr
+torch
+--extra-index-url https://download.pytorch.org/whl/cpu

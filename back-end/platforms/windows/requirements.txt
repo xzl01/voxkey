@@ -1,0 +1,32 @@
+# SPDX-FileCopyrightText: 2026 HarryLoong
+# SPDX-License-Identifier: MIT
+#
+# Windows voice-input daemon + local dual-engine ASR service dependencies.
+#
+# Install into a venv (use the FULL python path on this machine; the bare
+# `python` / `uv` trampolines are unreliable on the cloud-synced profile):
+#   & "C:\Users\xzl01\AppData\Local\Programs\Python\Python312\python.exe" -m venv .venv
+#   & .venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# --- daemon (hotkey / WASAPI capture / clipboard / notify) ---
+numpy>=1.26
+sounddevice>=0.4.6          # WASAPI mic capture (PortAudio backend on Windows)
+soundfile>=0.12             # write 16 kHz mono WAV for the ASR backend
+keyboard>=0.13.5            # global hotkey listener (run the daemon as admin)
+pyperclip>=1.8              # clipboard copy (IME-safe paste on Windows)
+requests>=2.31             # HTTP ASR backend (POST audio to /transcribe)
+plyer>=2.1                  # Windows toast notifications
+
+# --- local dual-engine ASR service (Qwen3 Vulkan + FunASR DirectML) ---
+fastapi>=0.110              # local /transcribe API consumed by the daemon + UI
+uvicorn>=0.29               # ASGI server (run with workers=1 on shared-memory APUs)
+onnxruntime-directml>=1.18  # FunASR SenseVoice encoder on AMD GPU via DirectML
+scipy>=1.11                 # audio resampling fallback for non-16k input
+# FunASR frontend (WavFrontend) needs funasr + torch. Only CPU torch is required
+# (feature extraction runs on CPU; the encoder itself runs on DirectML).
+funasr>=1.1
+# Avoid pulling the multi-GB CUDA build on a GPU-less APU — install torch CPU:
+#   & .venv\Scripts\python.exe -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+torch
+# qwen_asr_gguf is provided by the Qwen3-ASR-GGUF project placed at asr_project_dir;
+# install it (or its python deps) into this venv per that project's instructions.

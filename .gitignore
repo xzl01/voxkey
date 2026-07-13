@@ -3,6 +3,7 @@
 
 # Local runtime configuration
 /config.json
+back-end/platforms/windows/config.json
 
 # Runtime audio and caches (recordings live under $XDG_DATA_HOME, not in repo)
 /__pycache__/
@@ -61,3 +62,33 @@ front-end/desktop-ui/src-tauri/asr/
 # macOS ASR model weights and runtime artifacts (distributed out-of-band)
 back-end/platforms/macos/models/
 back-end/platforms/macos/test/data/
+
+# Local agent/diagnostic scratch files and build noise (windows backend)
+*.log
+*.zip
+*.bin
+*.wav
+*.bat
+*.exe
+.bootstrap_done
+.venv/
+bootstrap_run.log
+cargo_check.log
+.codebuddy/
+restart_codebuddy.ps1
+back-end/platforms/windows/_*.py
+back-end/platforms/windows/_*.log
+back-end/platforms/windows/seg*.bin
+back-end/platforms/windows/vk*.txt
+back-end/platforms/windows/funasr_export*.log
+back-end/platforms/windows/rb_*.log
+back-end/platforms/windows/svc_*.log
+back-end/platforms/windows/service*.log
+back-end/platforms/windows/service*.err.log
+back-end/platforms/windows/service*.out.log
+back-end/platforms/windows/20
+
+# Vendored external ASR project + local model weights (distributed out-of-band)
+back-end/platforms/windows/qwen-asr/
+back-end/platforms/windows/models/
+back-end/platforms/windows/qwen3_asr/

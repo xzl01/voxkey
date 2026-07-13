@@ -73,6 +73,7 @@ export const zh: Dictionary = {
   "models.reload": "刷新状态",
   "models.localOnly": "请在「设置」中切换到本地模型以更改引擎。",
   "models.statusTitle": "引擎状态",
+  "models.performanceWarningTitle": "性能提示",
 
   // 转写
   "capture.title": "转写",

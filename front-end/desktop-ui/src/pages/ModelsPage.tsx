@@ -36,6 +36,7 @@ export function ModelsPage() {
   const { showToast } = useToast();
   const { settings } = useSettings();
   const [engines, setEnginesState] = useState<EngineInfo[] | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [serviceReachable, setServiceReachable] = useState(true);
   const [switchingId, setSwitchingId] = useState<string | null>(null);
@@ -48,12 +49,14 @@ export function ModelsPage() {
     setLoading(true);
     try {
       const data = await getEngines(baseUrl);
-      setEnginesState(data);
+      setEnginesState(data.engines);
+      setWarnings(data.warnings ?? []);
       setServiceReachable(true);
     } catch {
       try {
         const data = await modelStatus();
         setEnginesState(data);
+        setWarnings([]);
         setServiceReachable(false);
       } catch (err) {
         console.error("model status failed", err);
@@ -73,11 +76,12 @@ export function ModelsPage() {
       setSwitchingId(engine.id);
       try {
         const next = await setEngines({ [engine.id]: !engine.enabled }, baseUrl);
-        setEnginesState(next);
+        setEnginesState(next.engines);
+        setWarnings(next.warnings ?? []);
         // Heavy models reload asynchronously inside the service; re-confirm shortly.
         window.setTimeout(() => {
           getEngines(baseUrl)
-            .then(setEnginesState)
+            .then((d) => setEnginesState(d.engines))
             .catch(() => undefined);
         }, 1500);
         showToast(t("toast.modelSwitched"), "success");
@@ -106,6 +110,17 @@ export function ModelsPage() {
       >
         {!serviceReachable && engines && (
           <p className={styles.banner}>{t("models.localOnly")}</p>
+        )}
+
+        {warnings.length > 0 && (
+          <div className={styles.warningBanner} role="alert">
+            <strong className={styles.warningTitle}>{t("models.performanceWarningTitle")}</strong>
+            <ul className={styles.warningList}>
+              {warnings.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {loading || !engines ? (

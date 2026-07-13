@@ -67,23 +67,28 @@ export async function getHealth(baseUrl: string = LOCAL_ASR_BASE): Promise<Healt
   return toJson<HealthResponse>(res);
 }
 
-export async function getEngines(baseUrl: string = LOCAL_ASR_BASE): Promise<EngineInfo[]> {
+export interface EnginesResponse {
+  engines: EngineInfo[];
+  warnings: string[];
+}
+
+export async function getEngines(baseUrl: string = LOCAL_ASR_BASE): Promise<EnginesResponse> {
   const res = await fetch(`${baseUrl}/engines`);
   if (!res.ok) throw new Error(`engines request failed (${res.status})`);
-  return toJson<EngineInfo[]>(res);
+  return toJson<EnginesResponse>(res);
 }
 
 export async function setEngines(
   enabled: Record<string, boolean>,
   baseUrl: string = LOCAL_ASR_BASE,
-): Promise<EngineInfo[]> {
+): Promise<EnginesResponse> {
   const res = await fetchWithToken(`${baseUrl}/engines`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ enabled }),
   });
   if (!res.ok) throw new Error(`engine switch failed (${res.status})`);
-  return toJson<EngineInfo[]>(res);
+  return toJson<EnginesResponse>(res);
 }
 
 export async function transcribeFile(

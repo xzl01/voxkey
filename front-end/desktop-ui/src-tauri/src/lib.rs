@@ -121,20 +121,37 @@ fn model_status(app: tauri::AppHandle) -> Vec<EngineInfo> {
     let base = resolve_macos_base(&app);
     let enabled = read_engine_enabled(&base);
 
-    let specs: [(&str, &str, &str, &str); 2] = [
-        (
-            "funasr_coreml",
-            "FunASR CoreML",
-            "npu",
-            "models/funasr_coreml/model.onnx",
-        ),
-        (
-            "qwen3_gpu",
-            "Qwen3-ASR GPU",
-            "gpu",
-            "models/qwen3_asr/qwen3_asr_llm.q4_k.gguf",
-        ),
-    ];
+    let specs: [(&str, &str, &str, &str); 2] = if cfg!(windows) {
+        [
+            (
+                "funasr_directml",
+                "FunASR DirectML",
+                "dml",
+                "models/funasr_directml/model.onnx",
+            ),
+            (
+                "qwen3_gpu",
+                "Qwen3-ASR GPU",
+                "gpu",
+                "models/qwen3_asr/qwen3_asr_llm.q4_k.gguf",
+            ),
+        ]
+    } else {
+        [
+            (
+                "funasr_coreml",
+                "FunASR CoreML",
+                "npu",
+                "models/funasr_coreml/model.onnx",
+            ),
+            (
+                "qwen3_gpu",
+                "Qwen3-ASR GPU",
+                "gpu",
+                "models/qwen3_asr/qwen3_asr_llm.q4_k.gguf",
+            ),
+        ]
+    };
 
     specs
         .iter()
@@ -169,37 +186,62 @@ fn asr_bundle_dir(app: &tauri::AppHandle) -> Option<PathBuf> {
         if prod.join("service.py").exists() {
             return Some(prod);
         }
-        // Dev layout: src-tauri/../../../back-end/platforms/macos/service.py
-        let dev = res.join("../../../back-end/platforms/macos");
-        if dev.join("service.py").exists() {
-            return Some(dev);
+        // Dev layout (repo checkout): back-end/platforms/{macos,windows}.
+        for plat in ["macos", "windows"] {
+            let dev = res.join("../../../back-end/platforms").join(plat);
+            if dev.join("service.py").exists() {
+                return Some(dev);
+            }
         }
     }
     None
 }
 
 /// Python interpreter used to launch the ASR service.
-/// Production: `<Resources>/asr/python/bin/python3` (bundled relocatable Python).
-/// Dev: the repo venv at `back-end/platforms/macos/.venv/bin/python`.
-/// Fallback: system `python3`.
+/// Production: `<Resources>/asr/python/...` (bundled relocatable Python;
+/// `bin/python3` on macOS, `python.exe` on Windows).
+/// Dev: the repo venv (`back-end/platforms/{macos,windows}/.venv`).
+/// Fallback: system `python3` (macOS/Linux) or `python` (Windows).
 fn asr_python_exe(app: &tauri::AppHandle) -> PathBuf {
     if let Ok(res) = app.path().resource_dir() {
-        let prod_py = res.join("asr").join("python").join("bin").join("python3");
+        let asr = res.join("asr");
+        let prod_py = if cfg!(windows) {
+            asr.join("python").join("python.exe")
+        } else {
+            asr.join("python").join("bin").join("python3")
+        };
         if prod_py.exists() {
             return prod_py;
         }
-        let dev_venv = res.join("../../../back-end/platforms/macos/.venv/bin/python");
+        let dev_venv = if cfg!(windows) {
+            res.join("../../../back-end/platforms/windows/.venv/Scripts/python.exe")
+        } else {
+            res.join("../../../back-end/platforms/macos/.venv/bin/python")
+        };
         if dev_venv.exists() {
             return dev_venv;
         }
     }
-    PathBuf::from("python3")
+    if cfg!(windows) {
+        PathBuf::from("python")
+    } else {
+        PathBuf::from("python3")
+    }
 }
 
 /// Default on-disk location of the per-process auth token, mirroring the
 /// Python service's home-cache fallback so the webview (`get_asr_token`) and
 /// the spawned service agree on the same path.
 fn default_token_file() -> PathBuf {
+    if cfg!(windows) {
+        // %LOCALAPPDATA%\dev.xzl01.voxkey\asr_token
+        if let Ok(local) = std::env::var("LOCALAPPDATA") {
+            return PathBuf::from(local)
+                .join("dev.xzl01.voxkey")
+                .join("asr_token");
+        }
+        return PathBuf::from("asr_token");
+    }
     let home = std::env::var("HOME").unwrap_or_default();
     PathBuf::from(home)
         .join("Library")
@@ -441,13 +483,18 @@ fn start_asr_service(
     cmd.arg(&service_py)
         .current_dir(&base)
         // The launched service reads these same vars (mirroring _startup):
-        .env("VOXKEY_MACOS_CONFIG", base.join("config.json"))
         .env("VOXKEY_ASR_TOKEN_FILE", &token_file)
         .env("VOXKEY_ASR_HOST", "127.0.0.1")
         .env("VOXKEY_ASR_PORT", "17863")
         .env("PYTHONUNBUFFERED", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    // The service reads its config via a platform-specific env var.
+    if cfg!(windows) {
+        cmd.env("VOXKEY_WIN_CONFIG", base.join("config.json"));
+    } else {
+        cmd.env("VOXKEY_MACOS_CONFIG", base.join("config.json"));
+    }
     let child = cmd
         .spawn()
         .map_err(|e| format!("failed to start ASR service: {e}"))?;
@@ -481,47 +528,55 @@ fn start_model_download(app: tauri::AppHandle) -> Result<(), String> {
     let base = asr_bundle_dir(&app).ok_or("could not locate the ASR service bundle")?;
     let python = asr_python_exe(&app);
 
-    // The two downloaders are siblings of service.py inside the bundle.
-    let ensure_funasr = base.join("ensure_funasr.py");
-    let ensure_qwen3 = base.join("ensure_qwen3.py");
-    if !ensure_funasr.exists() || !ensure_qwen3.exists() {
-        return Err(
-            "model downloaders (ensure_funasr.py / ensure_qwen3.py) are missing from the bundle"
-                .into(),
-        );
-    }
-
-    // Run both downloaders. Each is idempotent (skips files already present) and
-    // verifies SHA-256 against the committed manifest before use, so re-running
-    // is safe. A failure in one engine's download is logged but does not block
-    // the other; the spawned process exits non-zero on total failure.
     let mut cmd = Command::new(python);
     cmd.current_dir(&base)
         .env("PYTHONUNBUFFERED", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    // Run both downloaders. Each is idempotent (skips files already present) and
-    // verifies SHA-256 against the committed manifest before use. We pass
-    // `--no-convert` to ensure_funasr so a failed release download fails loudly
-    // instead of attempting a heavy local torch conversion on the user's Mac
-    // (the design is: weights always come from the published release).
-    // ensure_*.py default `--out` already points at models/funasr_coreml and
-    // models/qwen3_asr relative to CWD (the bundle dir), so CWD is enough.
-    let b = base.to_string_lossy().into_owned();
-    let f = ensure_funasr.to_string_lossy().into_owned();
-    let q = ensure_qwen3.to_string_lossy().into_owned();
-    let script = format!(
-        "import sys, runpy\n\
-         sys.path.insert(0, {base})\n\
-         sys.argv = [{funasr}, '--no-convert']\n\
-         runpy.run_path({funasr}, run_name='__main__', alter_sys=True)\n\
-         sys.argv = [{qwen3}]\n\
-         runpy.run_path({qwen3}, run_name='__main__', alter_sys=True)",
-        base = sh_quote(&b),
-        funasr = sh_quote(&f),
-        qwen3 = sh_quote(&q),
-    );
-    cmd.arg("-c").arg(script);
+
+    if cfg!(windows) {
+        // Windows: bootstrap_assets.py fetches the Qwen3 GGUF + Vulkan DLL from
+        // the GitHub release. FunASR ONNX export is heavier/manual, so it is not
+        // auto-triggered here (the app shows the engines; the user can convert
+        // separately). CWD is the bundle dir, so weights land in models/.
+        let bootstrap = base.join("bootstrap_assets.py");
+        if !bootstrap.exists() {
+            return Err("model downloader (bootstrap_assets.py) is missing from the bundle".into());
+        }
+        cmd.arg(&bootstrap).arg("--skip-clone");
+    } else {
+        // macOS: ensure_funasr.py / ensure_qwen3.py (siblings of service.py).
+        let ensure_funasr = base.join("ensure_funasr.py");
+        let ensure_qwen3 = base.join("ensure_qwen3.py");
+        if !ensure_funasr.exists() || !ensure_qwen3.exists() {
+            return Err(
+                "model downloaders (ensure_funasr.py / ensure_qwen3.py) are missing from the bundle"
+                    .into(),
+            );
+        }
+        // Run both downloaders. Each is idempotent (skips files already present)
+        // and verifies SHA-256 against the committed manifest before use. We pass
+        // `--no-convert` to ensure_funasr so a failed release download fails
+        // loudly instead of attempting a heavy local torch conversion on the
+        // user's Mac (the design is: weights always come from the published
+        // release). ensure_*.py default `--out` points at models/funasr_coreml
+        // and models/qwen3_asr relative to CWD (the bundle dir), so CWD suffices.
+        let b = base.to_string_lossy().into_owned();
+        let f = ensure_funasr.to_string_lossy().into_owned();
+        let q = ensure_qwen3.to_string_lossy().into_owned();
+        let script = format!(
+            "import sys, runpy\n\
+             sys.path.insert(0, {base})\n\
+             sys.argv = [{funasr}, '--no-convert']\n\
+             runpy.run_path({funasr}, run_name='__main__', alter_sys=True)\n\
+             sys.argv = [{qwen3}]\n\
+             runpy.run_path({qwen3}, run_name='__main__', alter_sys=True)",
+            base = sh_quote(&b),
+            funasr = sh_quote(&f),
+            qwen3 = sh_quote(&q),
+        );
+        cmd.arg("-c").arg(script);
+    }
 
     let child = cmd
         .spawn()
