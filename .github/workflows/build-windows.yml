@@ -84,8 +84,11 @@ jobs:
         # Tauri passes localePath verbatim as `-loc` to candle/light, which run
         # from a CWD where the committed repo-relative path does not resolve
         # (os error 3). Rewrite it to an absolute path on the runner.
+        # NOTE: job working-directory is front-end/desktop-ui, so the config is
+        # at src-tauri/tauri.conf.json and the committed value is
+        # "src-tauri/wix-locale.wxl" (relative to src-tauri/).
         run: |
-          $cfg = "front-end/desktop-ui/src-tauri/tauri.conf.json"
+          $cfg = "src-tauri/tauri.conf.json"
           # Forward slashes: backslashes are JSON escape chars (would break the
           # config) and candle/light accept forward slashes on Windows.
           $abs = "$env:GITHUB_WORKSPACE/front-end/desktop-ui/src-tauri/wix-locale.wxl" -replace '\\', '/'
